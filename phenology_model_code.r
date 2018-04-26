@@ -5,9 +5,9 @@
 model{
 	for(i in 1:Nobs){
 		ndvi[i]~dnorm(mu.ndvi[i],tau.ndvi)
-		mu.ndvi[i] <- base[pixelID[i]]+ (Amp[pixelID[i]]/(Greening[i]*Browning[i]))
-		Greening[i] <- 1+exp(slopeG[pixelID[i]]*(G1[pixelID[i]]-doy[i]))
-		Browning[i] <- 1+exp(slopeB[pixelID[i]]*(doy[i]-B1[pixelID[i]])
+		mu.ndvi[i] <- base[vegID[i]]+ (Amp[vegID[i]]/(Greening[i]*Browning[i]))
+		Greening[i] <- 1+exp(slopeG[vegID[i]]*(G1[vegID[i]]-doy[i]))
+		Browning[i] <- 1+exp(slopeB[vegID[i]]*(doy[i]-B1[vegID[i]])
 	}
 
 	for(i in 1:Npixels){
