@@ -13,11 +13,9 @@ rm(list=ls())
 
 setwd('L:/data_repo/gis_data/planet_cherskii/PlanetScope_4band_with_SR/')
 
-# test on mac
-# setwd('/Users/mloranty/Desktop/20170611/')
 
-# function to calculate various RS indices
-# note this also accounts for scaling factor of 0.0001
+############# define functions ###############
+# also accounts for scaling factor of 0.0001
 #ndvi
 ndvi <- function(x){nir <- x[[4]]*0.0001
                     r <- x[[3]]*0.0001
@@ -36,6 +34,8 @@ ndwi <- function(x){nir <- x[[4]]*0.0001
                     g <- x[[2]]*0.0001
                     vi <- (g-nir)/(g+nir)
                     return(vi)}
+
+############# calculate indices ###############
 
 # list all surface reflectance files
 sr <- list.files(pattern='SR',
@@ -60,9 +60,7 @@ for(i in 1:length(sr))
               overwrite=T)
 }
 
-################################################################
-
-# now reproject each file in order to be able to stack them for TS analyses
+############# change extents to stack files ###############
 
 # list all of the NDVI files
 n <- list.files(pattern=glob2rx('*NDVI.tif'),
@@ -74,8 +72,13 @@ e <- list.files(pattern=glob2rx('*EVI.tif'),
                 full.names=T,
                 recursive=T)
 
-# the files have the same projection and origin, but different extents
-# need to match extents to stack
+# list all of the EVI files
+w <- list.files(pattern=glob2rx('*NDWI.tif'),
+                full.names=T,
+                recursive=T)
+
+
+# determine common extent for all files
 x <- extent(raster(n[1]))
 
 for(i in 2:length(n))
@@ -92,31 +95,69 @@ for(i in 1:length(n))
         value=NA,
         filename=gsub('_NDVI.tif','_NDVI_RS.tif',n[i]),
         overwrite=T)
-  
+
   extend(raster(e[i]),x,
          value=NA,
          filename=gsub('_EVI.tif','_EVI_RS.tif',e[i]),
          overwrite=T)
+
+  extend(raster(w[i]),x,
+         value=NA,
+         filename=gsub('_NDWI.tif','_NDWI_RS.tif',w[i]),
+         overwrite=T) 
 }
 
 
-
-# now stack the files and extract data to test the model
+############# create water mask from NDWI and NDVI ###############
+w <- list.files(pattern=glob2rx('*NDWI_RS.tif'),
+                full.names=T,
+                recursive=T)
 
 n <- list.files(pattern=glob2rx('*NDVI_RS.tif'),
                 full.names=T,
                 recursive=T)
 
-# list all of the EVI files
+#NDWI
+# stack June-Aug images (too much snow in May)
+wf <- stack(w[8:41])
+
+wf.mean <- calc(wf,mean,na.rm=T,
+                filename='2017_3B_AnalyticMS_SR_NDWI_RS_MEAN.tif')
+
+wf.max <- calc(wf,max,na.rm=T,progress=T,
+                filename='2017_3B_AnalyticMS_SR_NDWI_RS_MAX.tif')
+
+wf.min <- calc(wf,min,na.rm=T,
+               filename='2017_3B_AnalyticMS_SR_NDWI_RS_MIN.tif')
+
+#NDVI
+nf <- stack(n)
+
+nf.mean <- calc(nf,mean,na.rm=T,
+                filename='2017_3B_AnalyticMS_SR_NDVI_RS_MEAN.tif')
+
+nf.max <- calc(nf,max,na.rm=T,
+               filename='2017_3B_AnalyticMS_SR_NDVI_RS_MAX.tif')
+############# apply water mask to all files ###############
+
+
+############# extract subset of data for phenology modeling ###############
+
+# ndvi files
+
+
+#evi files
 e <- list.files(pattern=glob2rx('*EVI_RS.tif'),
                 full.names=T,
                 recursive=T)
 
-# extract ndvi files
+
+
+# create raster stacks
 nf <- stack(n)
 ef <- stack(e)
 
-################################
+
 # strip timestamp from filenames
 ts <- strsplit(n,"/")
 ts <- sapply(ts,'[[',4)
@@ -129,24 +170,26 @@ ts <- with_tz(ts,tzone="Asia/Magadan")
 # calculate fractional julian day
 fjday <- julian(ts,origin = as.POSIXct('2017-01-01', tz = "Asia/Magadan"))
 
-#######################
-# read in sample points
+# read in sample points for preliminary analyses
 s <- readOGR('L:/data_repo/gis_data',
              layer='cherskiy_veg_pheno_sample')
+
 # something wonky with original layer - but OK for now
 # looks like there was a columns for elevation that we don't want/need
 r <- s@coords[,1:2]
 v <- SpatialPoints(r,proj4string = CRS('+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'))
 
-##############################################
+
 # extract the ndvi and combine date/site info
 nv <- extract(nf,v)
 ev <- extract(ef,v)
 
 colnames(nv) <- fjday
 
+# vector of vegetation types for preliminary analyses
 veg <- c(rep('fs',2),rep('s',14),rep('f',15),rep('fp',10))
 
+# create data frame for modeling
 # as vector extracts by column, and here each column is an image (jday), and each row is a site
 mod.dat <- as.data.frame(as.vector(nv))
 mod.dat$evi <- as.vector(ev)
@@ -154,9 +197,12 @@ mod.dat$doy <- rep(fjday,each=41)
 mod.dat$site <-  rep(s@data$Name,41)
 mod.dat$veg <- rep(veg,41)
 names(mod.dat) <- c("ndvi","evi","doy","site","veg")
+
+# write to file
 write.csv(mod.dat,file="C:/Users/mloranty/Documents/GitHub/ness_phenology/planet_veg_class_sample.csv",
           row.names = F)
 
 
+############# create data frame for full phenology model ###############
 
 
