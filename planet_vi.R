@@ -38,7 +38,7 @@ ndwi <- function(x){nir <- x[[4]]*0.0001
 ############# calculate indices ###############
 
 # list all surface reflectance files
-sr <- list.files(pattern='SR',
+sr <- list.files(pattern='SR.tif',
                  full.names=T,
                  recursive=T)
 
@@ -60,7 +60,7 @@ for(i in 1:length(sr))
               overwrite=T)
 }
 
-############# change extents to stack files ###############
+############# crop files to study area immediately surrounding ness ###############
 
 # list all of the NDVI files
 n <- list.files(pattern=glob2rx('*NDVI.tif'),
@@ -77,81 +77,100 @@ w <- list.files(pattern=glob2rx('*NDWI.tif'),
                 full.names=T,
                 recursive=T)
 
+# read roi shapefile #
+roi <- readOGR('C:/Users/mloranty/Documents/GitHub/ness_phenology/data',
+             layer='study_area')
+#roi <- extent(c(595893,602349,7624983,7630554))
 
-# determine common extent for all files
-x <- extent(raster(n[1]))
-
-for(i in 2:length(n))
-{
-  y <- extent(raster(n[i]))
-  x <- merge(x,y)
-}
-rm(y)
-
-# now use the exent to extend files
+# crop all VI files to just the roi
+# reclassify ndvi and evi to include only positive values
 for(i in 1:length(n))
-{
-  extend(raster(n[i]),x,
-        value=NA,
-        filename=gsub('_NDVI.tif','_NDVI_RS.tif',n[i]),
-        overwrite=T)
+  {
+    # see if the extents overlap -   
+    t <- tryCatch(!is.null(crop(raster(n[i]),roi)), error=function(e) return(FALSE))   
 
-  extend(raster(e[i]),x,
-         value=NA,
-         filename=gsub('_EVI.tif','_EVI_RS.tif',e[i]),
-         overwrite=T)
-
-  extend(raster(w[i]),x,
-         value=NA,
-         filename=gsub('_NDWI.tif','_NDWI_RS.tif',w[i]),
-         overwrite=T) 
-}
-
+    if(t==F) {
+    print('no overlap')}
+    else{
+      #ndvi
+      nc <- crop(raster(n[i]),roi,
+                 filename=gsub('_NDVI.tif','_NDVI_ness.tif',n[i]),
+                 overwrite=T)
+      nc <- extend(nc,roi,
+                   value=NA,
+                   filename=gsub('_NDVI.tif','_NDVI_ness.tif',n[i]),
+                   overwrite=T)    
+      reclassify(nc,c(-Inf,0,NA),
+                filename=gsub('_NDVI.tif','_NDVI_ness.tif',n[i]),
+                overwrite=T)
+      #evi
+      ec <- crop(raster(e[i]),roi,
+              filename=gsub('_EVI.tif','_EVI_ness.tif',e[i]),
+              overwrite=T)
+      ec <- extend(ec,roi,
+                   value=NA,
+                   filename=gsub('_EVI.tif','_EVI_ness.tif',e[i]),
+                   overwrite=T)
+      reclassify(ec,c(-Inf,0,NA),
+                 filename=gsub('_EVI.tif','_EVI_ness.tif',e[i]),
+                 overwrite=T)
+      
+      #ndwi
+      wc <- crop(raster(w[i]),roi,
+                 filename=gsub('_NDWI.tif','_NDWI_ness.tif',w[i]),
+                 overwrite=T) 
+      wc <- extend(wc,roi,
+                   value=NA,
+                   filename=gsub('_NDWI.tif','_NDWI_ness.tif',w[i]),
+                   overwrite=T)
+        }
+  }
 
 ############# create water mask from NDWI and NDVI ###############
-w <- list.files(pattern=glob2rx('*NDWI_RS.tif'),
+w <- list.files(pattern=glob2rx('*NDWI_ness.tif'),
                 full.names=T,
                 recursive=T)
 
-n <- list.files(pattern=glob2rx('*NDVI_RS.tif'),
+n <- list.files(pattern=glob2rx('*NDVI_ness.tif'),
                 full.names=T,
                 recursive=T)
 
 #NDWI
-# stack June-Aug images (too much snow in May)
-wf <- stack(w[8:41])
+# stack June-Sept images (too much snow in May)
+wf <- stack(w[5:37])
 
 wf.mean <- calc(wf,mean,na.rm=T,
-                filename='2017_3B_AnalyticMS_SR_NDWI_RS_MEAN.tif')
+                filename='2017_3B_AnalyticMS_SR_NDWI_ness_MEAN.tif')
 
 wf.max <- calc(wf,max,na.rm=T,progress=T,
-                filename='2017_3B_AnalyticMS_SR_NDWI_RS_MAX.tif')
+                filename='2017_3B_AnalyticMS_SR_NDWI_ness_MAX.tif')
 
 wf.min <- calc(wf,min,na.rm=T,
-               filename='2017_3B_AnalyticMS_SR_NDWI_RS_MIN.tif')
+               filename='2017_3B_AnalyticMS_SR_NDWI_ness_MIN.tif')
 
 #NDVI
 nf <- stack(n)
 
 nf.mean <- calc(nf,mean,na.rm=T,
-                filename='2017_3B_AnalyticMS_SR_NDVI_RS_MEAN.tif')
+                filename='2017_3B_AnalyticMS_SR_NDVI_ness_MEAN.tif')
 
 nf.max <- calc(nf,max,na.rm=T,
-               filename='2017_3B_AnalyticMS_SR_NDVI_RS_MAX.tif')
+               filename='2017_3B_AnalyticMS_SR_NDVI_ness_MAX.tif')
+
+# note water mask values based on visual interpretation
+# used seasonal mean because if differences in coverage and hydrology
+mask <- reclassify(wf.mean,c(-0.44,Inf,NA),
+                   filename='2017_3B_AnalyticMS_SR_ness_water_mask.tif')
+
 ############# apply water mask to all files ###############
 
 
 ############# extract subset of data for phenology modeling ###############
 
-# ndvi files
-
-
 #evi files
-e <- list.files(pattern=glob2rx('*EVI_RS.tif'),
+e <- list.files(pattern=glob2rx('*EVI_ness.tif'),
                 full.names=T,
                 recursive=T)
-
-
 
 # create raster stacks
 nf <- stack(n)
@@ -171,7 +190,7 @@ ts <- with_tz(ts,tzone="Asia/Magadan")
 fjday <- julian(ts,origin = as.POSIXct('2017-01-01', tz = "Asia/Magadan"))
 
 # read in sample points for preliminary analyses
-s <- readOGR('L:/data_repo/gis_data',
+s <- readOGR('L:/projects/ness_phenology/gis',
              layer='cherskiy_veg_pheno_sample')
 
 # something wonky with original layer - but OK for now
@@ -193,16 +212,16 @@ veg <- c(rep('fs',2),rep('s',14),rep('f',15),rep('fp',10))
 # as vector extracts by column, and here each column is an image (jday), and each row is a site
 mod.dat <- as.data.frame(as.vector(nv))
 mod.dat$evi <- as.vector(ev)
-mod.dat$doy <- rep(fjday,each=41)
+mod.dat$doy <- rep(fjday,each=nrow(nv))
 mod.dat$site <-  rep(s@data$Name,41)
 mod.dat$veg <- rep(veg,41)
 names(mod.dat) <- c("ndvi","evi","doy","site","veg")
 
+mod.dat <- na.omit(mod.dat)
 # write to file
-write.csv(mod.dat,file="C:/Users/mloranty/Documents/GitHub/ness_phenology/planet_veg_class_sample.csv",
-          row.names = F)
+write.csv(mod.dat,file="C:/Users/mloranty/Documents/GitHub/ness_phenology/planet_veg_class_sample.csv",row.names = F)
 
-
+write.csv(mod.dat,file="L:/projects/ness_phenology/planet_veg_class_sample.csv",row.names = F)
 ############# create data frame for full phenology model ###############
 
 
