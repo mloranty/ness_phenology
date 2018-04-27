@@ -13,6 +13,7 @@ library(mcmcplots)
 datP <- read.csv("z:\\projects\\ness_phenology\\planet_veg_class_sample.csv")
 modDI <- "z:\\projects\\ness_phenology\\sample_model\\run1"
 
+modRun <-1
 
 ###############################################
 ###############set up data for run ############
@@ -26,10 +27,14 @@ abline(v=193)
 datP1 <- datP[floor(datP$doy)!=193,]
 plot(datP1$doy,datP1$ndvi)
 
+#remove forest shrub mix because too few observations to look at
+
+datP1 <- datP1[datP1$veg!="fs",]
+
 
 #organize a table of IDs, just start with vegetation
 
-vegDF <- unique(data.frame(veg=datP$veg))
+vegDF <- unique(data.frame(veg=datP1$veg))
 
 vegDF$vegID <- seq(1,dim(vegDF)[1])
 
@@ -46,10 +51,11 @@ datP2$doyN <- (datP2$doy-doyMin)/(doyMax-doyMin)
 plot(datP2$doyN, datP2$ndvi)
 
 
+
 ###############################################
 ###############set up model run    ############
 ###############################################
-
+if(modRun==1){
 datalist <- list(Nobs=dim(datP2)[1], ndvi=datP2$ndvi, vegID=datP2$vegID,doyN=datP2$doyN,
 				Nveg=dim(vegDF)[1])
 
@@ -61,7 +67,7 @@ samp.modI<-jags.model(file="c:\\Users\\hkropp\\Documents\\GitHub\\ness_phenology
 						n.chains=3)
 
 samp.sample <- coda.samples(samp.modI,variable.names=parms,
-                       n.iter=60000, thin=30)	
+                       n.iter=100000, thin=100)	
 			   
 mcmcplot(samp.sample, parms=c("sig.ndvi","base","Amp","slopeG","slopeB","G1","B1"),
 			dir=paste0(modDI,"\\history"))	
@@ -72,8 +78,16 @@ write.table(mod.out$statistics,paste0(modDI,"\\comp_mod_stats.csv"),
 			sep=",",row.names=TRUE)
 write.table(mod.out$quantiles,paste0(modDI,"\\comp_mod_quant.csv"),
 			sep=",",row.names=TRUE)
+}
 
-
+###############################################
+##############look at results##################
+###############################################			
+#read in model results
+modS <- read.csv(paste0(modDI,"\\comp_mod_stats.csv"))		
+modQ <- read.csv(paste0(modDI,"\\comp_mod_quant.csv"))				
+			
+			
 
 ###############################################
 ##############look at curves###################
