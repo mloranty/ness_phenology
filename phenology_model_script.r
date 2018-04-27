@@ -13,7 +13,7 @@ library(mcmcplots)
 datP <- read.csv("z:\\projects\\ness_phenology\\planet_veg_class_sample.csv")
 modDI <- "z:\\projects\\ness_phenology\\sample_model\\run1"
 
-modRun <-1
+modRun <-0
 
 ###############################################
 ###############set up data for run ############
@@ -86,8 +86,34 @@ write.table(mod.out$quantiles,paste0(modDI,"\\comp_mod_quant.csv"),
 #read in model results
 modS <- read.csv(paste0(modDI,"\\comp_mod_stats.csv"))		
 modQ <- read.csv(paste0(modDI,"\\comp_mod_quant.csv"))				
+
+datC <- cbind(modS,modQ)
 			
-			
+dexps<-"\\[*[[:digit:]]*\\]"
+
+datC$parms <- gsub(dexps,"", rownames(datC))	
+
+#check model fit
+mfit <- lm(datC$Mean[datC$parms=="ndvi.rep"]~datP2$ndvi)
+jpeg(paste0(modDI,"\\modelfit.jpeg"), width=700, height=700, units="px",quality=100)
+	plot(datP2$ndvi, datC$Mean[datC$parms=="ndvi.rep"], xlim=c(0,1), ylim=c(0,1), xlab="observed ndvi", ylab="predicted ndvi",pch=19)
+	text(.3,.9, paste("pred=",round(summary(mfit)$coefficients[1,1],3), "+",round(summary(mfit)$coefficients[2,1],2), "*obs"))
+	text(.3,.8, paste("r2=",round(summary(mfit)$r.squared,3)))
+	abline(0,1,lwd=2,col="red")
+	abline(mfit, lwd=2,lty=3)
+dev.off()
+
+
+#check if vegetation is different
+jpeg(paste0(modDI,"\\halfmax.jpeg"), width=700, height=700, units="px",quality=100)
+	par(mfrow=c(1,2))
+	plot(seq(1,3), datC$Mean[datC$parms=="half.G"], xaxt="n", xlab="vegetation type", ylab="halfway max green", pch=19, ylim=c(0,.01))
+	axis(1,seq(1,3), vegDF$veg)
+	arrows(seq(1,3),datC$X2.5[datC$parms=="half.G"],seq(1,3),datC$X97.5[datC$parms=="half.G"], code=0)
+	plot(seq(1,3), datC$Mean[datC$parms=="half.B"], xaxt="n", xlab="vegetation type", ylab="halfway max brown", pch=19, ylim=c(0.1,.15))
+	axis(1,seq(1,3), vegDF$veg)
+	arrows(seq(1,3),datC$X2.5[datC$parms=="half.B"],seq(1,3),datC$X97.5[datC$parms=="half.B"], code=0)
+dev.off()
 
 ###############################################
 ##############look at curves###################
@@ -117,7 +143,7 @@ phenC3 <- function(amp,base,c1,slope1,c2,slope2,doy){
 xval <- seq(0,1, by=.1)
 yval1 <- phenC1(.5,.3,.4,10,xval)
 
-yval3 <- phenC3(.5,.3,0.4,2,.6,10,xval)
+yval3 <- phenC3(.5,.3,0.4,10,.6,10,xval)
 
 plot(xval,yval1, type="l", lwd=2, col="cornflowerblue")
 points(xval,yval3, type="l",lwd=2, col="tomato3")
