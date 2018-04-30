@@ -11,9 +11,9 @@ library(mcmcplots)
 ###############################################
 #cubesat data
 datP <- read.csv("z:\\projects\\ness_phenology\\planet_veg_class_sample.csv")
-modDI <- "z:\\projects\\ness_phenology\\sample_model\\run1"
-
-modRun <-0
+modDI <- "z:\\projects\\ness_phenology\\sample_model\\run3"
+#set to 1 if runing model and not just plotting
+modRun <-1
 
 ###############################################
 ###############set up data for run ############
@@ -38,17 +38,24 @@ vegDF <- unique(data.frame(veg=datP1$veg))
 
 vegDF$vegID <- seq(1,dim(vegDF)[1])
 
+
 #join back into the dataframe
 datP2 <- join(datP1,vegDF, by="veg", type="left")
 
+#pixel vege id
+pixDF <- unique(data.frame(site=datP2$site,vegID=datP2$vegID))
+
+pixDF$pixID <- seq(1,dim(pixDF)[1])
+
+datP3 <- join(datP2, pixDF, by=c("site","vegID"),type="left")
 
 #normalize day timeframe
 doyMin <- 135
 doyMax <- 273
 
-datP2$doyN <- (datP2$doy-doyMin)/(doyMax-doyMin)
+datP3$doyN <- (datP3$doy-doyMin)/(doyMax-doyMin)
 
-plot(datP2$doyN, datP2$ndvi)
+plot(datP3$doyN, datP3$ndvi)
 
 
 
@@ -56,20 +63,24 @@ plot(datP2$doyN, datP2$ndvi)
 ###############set up model run    ############
 ###############################################
 if(modRun==1){
-datalist <- list(Nobs=dim(datP2)[1], ndvi=datP2$ndvi, vegID=datP2$vegID,doyN=datP2$doyN,
+datalist <- list(Nobs=dim(datP3)[1], ndvi=datP3$ndvi, vegID=datP3$vegID,doyN=datP3$doyN,
+					pixID=datP3$pixID,NpixID=dim(pixDF)[1], vegIDP=pixDF$vegID,
 				Nveg=dim(vegDF)[1])
 
-parms <- c("ndvi.rep", "sig.ndvi","base","Amp","slopeG","slopeB","G1","B1", "half.G","half.B")
+parms <- c("ndvi.rep", "sig.ndvi","base","Amp","slopeG","slopeB","G1","B1", "mu.Amp","mu.slopeG","mu.slopeB","mu.G1","mu.B1","half.G","half.B",
+			"sig.base","sig.Amp","sig.slopeG","sig.slopeB","sig.G1","sig.B1")
 
 samp.modI<-jags.model(file="c:\\Users\\hkropp\\Documents\\GitHub\\ness_phenology\\phenology_model_code.r",
 						data=datalist,
-						n.adapt=5000,
+						n.adapt=50000,
 						n.chains=3)
 
 samp.sample <- coda.samples(samp.modI,variable.names=parms,
-                       n.iter=100000, thin=100)	
+                       n.iter=200000, thin=200)	
 			   
-mcmcplot(samp.sample, parms=c("sig.ndvi","base","Amp","slopeG","slopeB","G1","B1"),
+mcmcplot(samp.sample, parms=c("sig.ndvi","base","Amp","slopeG","slopeB","G1","B1",
+							"mu.Amp","mu.slopeG","mu.slopeB","mu.G1","mu.B1","half.G","half.B",
+							"sig.base","sig.Amp","sig.slopeG","sig.slopeB","sig.G1","sig.B1"),
 			dir=paste0(modDI,"\\history"))	
 					   
 mod.out <- summary(samp.sample)
