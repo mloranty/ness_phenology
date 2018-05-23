@@ -13,7 +13,7 @@ rm(list=ls())
 
 setwd('L:/data_repo/gis_data/planet_cherskii/PlanetScope_4band_with_SR/')
 
-
+#########################################################################
 ############# define functions ###############
 # also accounts for scaling factor of 0.0001
 #ndvi
@@ -35,6 +35,7 @@ ndwi <- function(x){nir <- x[[4]]*0.0001
                     vi <- (g-nir)/(g+nir)
                     return(vi)}
 
+#########################################################################
 ############# calculate indices ###############
 
 # list all surface reflectance files
@@ -60,6 +61,7 @@ for(i in 1:length(sr))
               overwrite=T)
 }
 
+#########################################################################
 ############# crop files to study area immediately surrounding ness ###############
 
 # list all of the NDVI files
@@ -126,6 +128,7 @@ for(i in 1:length(n))
         }
   }
 
+#########################################################################
 ############# create water mask from NDWI and NDVI ###############
 w <- list.files(pattern=glob2rx('*NDWI_ness.tif'),
                 full.names=T,
@@ -162,9 +165,80 @@ nf.max <- calc(nf,max,na.rm=T,
 mask <- reclassify(wf.mean,c(-0.44,Inf,NA),
                    filename='2017_3B_AnalyticMS_SR_ness_water_mask.tif')
 
+#########################################################################
 ############# apply water mask to all files ###############
+mask <- raster('2017_3B_AnalyticMS_SR_ness_water_mask.tif')
+
+# list all of the NDVI files
+n <- list.files(pattern=glob2rx('*NDVI_ness.tif'),
+                full.names=T,
+                recursive=T)
+
+# list all of the EVI files
+e <- list.files(pattern=glob2rx('*EVI_ness.tif'),
+                full.names=T,
+                recursive=T)
+
+for(i in 1:length(n))
+{
+  mask(raster(n[i]),mask,
+       filename=gsub('_NDVI_ness.tif','_NDVI_ness_h2o_mask.tif',n[i]))
+  mask(raster(e[i]),mask,
+       filename=gsub('_EVI_ness.tif','_EVI_ness_h2o_mask.tif',e[i]))
+}
+
+#########################################################################
+############# create canopy cover map from field obs ###############
+
+# read panchromatic data
+pan <- raster("L:/data_repo/gis_data/siberia_high_resolution/chersky_area/WV02_20150308004730_103001003F9F4900_15MAR08004730-P1BS-500379646120_01_P002_u16ns3413.tif")
+
+# read stand data
+den <- read.csv("L:/projects/ness_phenology/stand_data.csv", header=T)
+
+d <- SpatialPointsDataFrame(den[,5:4],den,
+                            proj4string = CRS('+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'))
+
+f <- readOGR("L:/projects/ness_phenology/gis",
+             layer="forest")
+t <- extract(pan,d,buffer=15)
+
+dn <- unlist(lapply(t,FUN="mean"))
 
 
+d.norm <- ((dn-400)/(1400-400))+1
+cc <- d$cc.pct
+m1 <- nls(cc ~ a*exp(-b*d.norm),
+            start=list(a=15000,b=4))
+m2 <- lm(log(cc+0.1)~log(dn))
+plot(log(cc+0.1)~log(dn))
+#########################################################################
+############# create canopy cover map from field obs ###############
+
+# just upland forest area
+f.pl <- rasterize(f,mask,
+                  mask=T,
+                  filename='ness_forest_roi_planet.tif',
+                  overwrite=T)
+
+# reproject panchromatic to planet resolution
+pan.pl <- projectRaster(pan,mask,
+                        method='bilinear',
+                        filename = 'WV02_20150308004730_planet_ness.tif',
+                        overwrite=T)
+
+# mask to only water & forest
+pan.pl <- mask(pan.pl,f.pl,
+               filename = 'WV02_20150308004730_planet_ness_h2o_mask.tif',
+               overwrite=T)
+
+cc.lm <- exp(coefficients(m2)[1]+log(pan.pl)*coefficients(m2)[2])
+cc.exp <- coefficients(m1)[1]*exp(-coefficients(m1)[2]*(((pan.pl-400)/(1400-400))+1))
+
+cc.lm <- reclassify(cc.lm,c(100,Inf,100),
+                    filename='canopy_cover_planet_linear_model.tif')
+cc.exp <- reclassify(cc.exp,c(100,Inf,100),
+                    filename='canopy_cover_planet_exp_model.tif')
 ############# extract subset of data for phenology modeling ###############
 
 #evi files
@@ -222,6 +296,7 @@ mod.dat <- na.omit(mod.dat)
 write.csv(mod.dat,file="C:/Users/mloranty/Documents/GitHub/ness_phenology/planet_veg_class_sample.csv",row.names = F)
 
 write.csv(mod.dat,file="L:/projects/ness_phenology/planet_veg_class_sample.csv",row.names = F)
+
 ############# create data frame for full phenology model ###############
 
 
