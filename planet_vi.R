@@ -285,10 +285,14 @@ points(cc,exp(predict(m2))-cc,col='gray50',pch=17)
 abline(h=0,lwd=2,lty='dashed')
 legend('topright',c('Exponential','Linear'), bty='n',pch=c(16,17),col=c('black','gray50'))
 dev.off()
-############# extract subset of data for phenology modeling ###############
+############# compare field obs to NDVI/EVI ###############
 
+############# extract subset of data for phenology modeling ###############
 #evi files
-e <- list.files(pattern=glob2rx('*EVI_ness.tif'),
+e <- list.files(pattern=glob2rx('*EVI_ness_h2o_mask.tif'),
+                full.names=T,
+                recursive=T)
+n <- list.files(pattern=glob2rx('*NDVI_ness_h2o_mask.tif'),
                 full.names=T,
                 recursive=T)
 
@@ -296,6 +300,38 @@ e <- list.files(pattern=glob2rx('*EVI_ness.tif'),
 nf <- stack(n)
 ef <- stack(e)
 
+# extract data for sample stands
+#june 15
+nv6 <- extract(nf[[11]],d,buffer=15,na.rm=T)
+ev6 <- extract(ef[[11]],d,buffer=15,na.rm=T)
+
+#july 26
+nv <- extract(nf[[18]],d,buffer=15,na.rm=T)
+ev <- extract(ef[[18]],d,buffer=15,na.rm=T)
+
+
+nvs <- cbind(unlist(lapply(nv,FUN="mean")),
+            unlist(lapply(nv,FUN="sd")),
+            unlist(lapply(nv6,FUN="mean")),
+            unlist(lapply(nv6,FUN="sd")))
+
+evs <- cbind(unlist(lapply(ev,FUN="mean")),
+             unlist(lapply(ev,FUN="sd")),
+             unlist(lapply(ev6,FUN="mean")),
+             unlist(lapply(ev6,FUN="sd")))
+
+plot(d$cc.pct,nvs[,1],pch=16,
+     ylim=c(0.35,0.7))
+points(d$cc.pct,nvs[,3],pch=16,col='gray50')
+
+plot(d$cc.pct,evs[,1],pch=16,
+     ylim=c(0.05,0.35))
+points(d$cc.pct,evs[,3],pch=16,col='gray50')
+
+plot(getValues(cc.exp),getValues(nv[[18]]))
+
+plot(d$agb,nvs[,1],pch=16)
+plot(d$agb,evs[,1],pch=16,col='gray50')
 
 # strip timestamp from filenames
 ts <- strsplit(n,"/")
