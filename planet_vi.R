@@ -206,7 +206,7 @@ t <- extract(pan,d,buffer=15)
 dn <- unlist(lapply(t,FUN="mean"))
 
 
-d.norm <- ((dn-400)/(1400-400))+1
+d.norm <- ((dn-450)/(1000-450))+1
 cc <- d$cc.pct
 m1 <- nls(cc ~ a*exp(-b*d.norm),
             start=list(a=15000,b=4))
@@ -233,12 +233,58 @@ pan.pl <- mask(pan.pl,f.pl,
                overwrite=T)
 
 cc.lm <- exp(coefficients(m2)[1]+log(pan.pl)*coefficients(m2)[2])
-cc.exp <- coefficients(m1)[1]*exp(-coefficients(m1)[2]*(((pan.pl-400)/(1400-400))+1))
+cc.exp <- coefficients(m1)[1]*exp(-coefficients(m1)[2]*(((pan.pl-450)/(1000-450))+1))
 
 cc.lm <- reclassify(cc.lm,c(100,Inf,100),
-                    filename='canopy_cover_planet_linear_model.tif')
+                    filename='canopy_cover_planet_linear_model.tif',
+                    overwrite=T)
 cc.exp <- reclassify(cc.exp,c(100,Inf,100),
-                    filename='canopy_cover_planet_exp_model.tif')
+                    filename='canopy_cover_planet_exp_model.tif',
+                    overwrite=T)
+#########################################################################
+############# create a figure of model fits ###############
+pdf(file='L:/projects/ness_phenology/figures/canopy_cover_exp_model.pdf',5,5)
+par(cex=1,cex.axis=1.25,cex.lab=1.25)
+plot(dn,cc,pch=16,
+     ylab = "Canopy Cover (%)",
+     xlab = "DN",
+     ylim=c(0,100),
+     xlim=c(400,1000))
+lines(450:1000,lwd=2,lty='dashed',
+      coefficients(m1)[1]*exp(-coefficients(m1)[2]*((((450:1000)-450)/(1000-450))+1)))
+dev.off()
+
+pdf(file='L:/projects/ness_phenology/figures/canopy_cover_linear_model.pdf',5,5)
+par(cex=1,cex.axis=1.25,cex.lab=1.25)
+plot(log(dn),log(cc),pch=16,
+     ylab = "log(Canopy Cover)",
+     xlab = "log(DN)")
+lines(log(450:1000),lwd=2,lty='dashed',
+      coefficients(m2)[1]+log(450:1000)*coefficients(m2)[2])
+dev.off()
+
+pdf(file='L:/projects/ness_phenology/figures/canopy_cover_obs_vs_pred.pdf',5,5)
+par(cex=1,cex.axis=1.25,cex.lab=1.25)
+plot(cc,predict(m1),pch=16,
+     xlab = "Observed Canopy Cover (%)",
+     ylab = "Predicted Canopy Cover (%)")
+points(cc,exp(predict(m2)),col='gray50',pch=17)
+abline(lm(predict(m1)~cc),lwd=2,lty='dashed')
+abline(lm(exp(predict(m2))~cc),lwd=2,lty='dashed',col='gray50')
+cor(predict(m1),cc)
+cor(exp(predict(m2)),cc)
+legend('topleft',c('Exponential','Linear'), bty='n',pch=c(16,17),col=c('black','gray50'))
+dev.off()
+
+pdf(file='L:/projects/ness_phenology/figures/canopy_cover_residuals.pdf',5,5)
+par(cex=1,cex.axis=1.25,cex.lab=1.25)
+plot(cc,predict(m1)-cc,pch=16,
+     xlab = "Observed Canopy Cover (%)",
+     ylab = "Predicted Canopy Cover (%)")
+points(cc,exp(predict(m2))-cc,col='gray50',pch=17)
+abline(h=0,lwd=2,lty='dashed')
+legend('topright',c('Exponential','Linear'), bty='n',pch=c(16,17),col=c('black','gray50'))
+dev.off()
 ############# extract subset of data for phenology modeling ###############
 
 #evi files
