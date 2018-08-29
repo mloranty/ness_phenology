@@ -1,0 +1,820 @@
+######################
+# create ndvi and evi 
+# stacks from planet
+# 4band surf refl
+#
+# ML 03/13/18
+#####################
+require(raster)
+require(spatial)
+require(rgdal)
+require(lubridate)
+rm(list=ls())
+
+setwd('L:/data_repo/gis_data/planet_cherskii/PlanetScope_4band_with_SR/')
+
+#########################################################################
+############# define functions ###############
+# also accounts for scaling factor of 0.0001
+#ndvi
+ndvi <- function(x){nir <- x[[4]]*0.0001
+                    r <- x[[3]]*0.0001
+                    vi <- (nir-r)/(nir+r)
+                    return(vi)}
+
+#evi using coefficients from MODIS/Landsat algorithms
+evi <- function(x){nir <- x[[4]]*0.0001
+                   r <- x[[3]]*0.0001
+                   b <- x[[1]]*0.0001
+                   vi <- 2.5*((nir-r)/(nir+6*r+7.5*b+1))
+                   return(vi)}
+
+# ndwi after McFeeters 1996 for water delineation
+ndwi <- function(x){nir <- x[[4]]*0.0001
+                    g <- x[[2]]*0.0001
+                    vi <- (g-nir)/(g+nir)
+                    return(vi)}
+
+#########################################################################
+############# calculate indices ###############
+
+# list all surface reflectance files
+sr <- list.files(pattern='SR.tif',
+                 full.names=T,
+                 recursive=T)
+
+# create vi layers for each SR file
+for(i in 1:length(sr))
+{
+  x <- stack(sr[i])
+  n <- ndvi(x)
+  writeRaster(n,
+              filename=gsub('.tif','_NDVI.tif',sr[i]),
+              overwrite=T)
+  e <- evi(x)
+  writeRaster(e,
+              filename=gsub('.tif','_EVI.tif',sr[i]),
+              overwrite=T)
+  w <- ndwi(x)
+  writeRaster(w,
+              filename=gsub('.tif','_NDWI.tif',sr[i]),
+              overwrite=T)
+}
+
+#########################################################################
+############# crop files to study area immediately surrounding ness ###############
+
+# list all of the NDVI files
+n <- list.files(pattern=glob2rx('*NDVI.tif'),
+                full.names=T,
+                recursive=T)
+
+# list all of the EVI files
+e <- list.files(pattern=glob2rx('*EVI.tif'),
+                full.names=T,
+                recursive=T)
+
+# list all of the NDWI files
+w <- list.files(pattern=glob2rx('*NDWI.tif'),
+                full.names=T,
+                recursive=T)
+
+# read roi shapefile #
+roi <- readOGR('C:/Users/mloranty/Documents/GitHub/ness_phenology/data',
+             layer='study_area')
+#roi <- extent(c(595893,602349,7624983,7630554))
+
+# crop all VI files to just the roi
+# reclassify ndvi and evi to include only positive values
+for(i in 1:length(n))
+#for(i in 25:26) #process new files - need to code better
+  {
+    # see if the extents overlap -
+    t <- tryCatch(!is.null(crop(raster(n[i]),roi)), error=function(e) return(FALSE))
+
+    if(t==F) {
+    print('no overlap')}
+    else{
+      #ndvi
+      nc <- crop(raster(n[i]),roi,
+                 filename=gsub('_NDVI.tif','_NDVI_ness.tif',n[i]),
+                 overwrite=T)
+      nc <- extend(nc,roi,
+                   value=NA,
+                   filename=gsub('_NDVI.tif','_NDVI_ness.tif',n[i]),
+                   overwrite=T)
+      reclassify(nc,c(-Inf,0,NA),
+                filename=gsub('_NDVI.tif','_NDVI_ness.tif',n[i]),
+                overwrite=T)
+      #evi
+      ec <- crop(raster(e[i]),roi,
+              filename=gsub('_EVI.tif','_EVI_ness.tif',e[i]),
+              overwrite=T)
+      ec <- extend(ec,roi,
+                   value=NA,
+                   filename=gsub('_EVI.tif','_EVI_ness.tif',e[i]),
+                   overwrite=T)
+      reclassify(ec,c(-Inf,0,NA),
+                 filename=gsub('_EVI.tif','_EVI_ness.tif',e[i]),
+                 overwrite=T)
+
+      #ndwi
+      wc <- crop(raster(w[i]),roi,
+                 filename=gsub('_NDWI.tif','_NDWI_ness.tif',w[i]),
+                 overwrite=T)
+      wc <- extend(wc,roi,
+                   value=NA,
+                   filename=gsub('_NDWI.tif','_NDWI_ness.tif',w[i]),
+                   overwrite=T)
+        }
+  }
+
+#########################################################################
+############# create water mask from NDWI and NDVI ###############
+w <- list.files(pattern=glob2rx('*NDWI_ness.tif'),
+                full.names=T,
+                recursive=T)
+
+n <- list.files(pattern=glob2rx('*NDVI_ness.tif'),
+                full.names=T,
+                recursive=T)
+
+#NDWI
+# stack June-Sept images (too much snow in May)
+wf <- stack(w[5:37])
+wf.18 <- stack(w[42:59])
+
+wf.mean <- calc(wf,mean,na.rm=T,
+                filename='2017_3B_AnalyticMS_SR_NDWI_ness_MEAN.tif')
+wf.mean <- calc(wf.18,mean,na.rm=T,
+                filename='2018_3B_AnalyticMS_SR_NDWI_ness_MEAN.tif')
+
+wf.max <- calc(wf,max,na.rm=T,progress=T,
+                filename='2017_3B_AnalyticMS_SR_NDWI_ness_MAX.tif')
+wf.max <- calc(wf.18,max,na.rm=T,
+                filename='2018_3B_AnalyticMS_SR_NDWI_ness_MAX.tif')
+
+wf.min <- calc(wf,min,na.rm=T,
+               filename='2017_3B_AnalyticMS_SR_NDWI_ness_MIN.tif')
+wf.min <- calc(wf.18,min,na.rm=T,
+               filename='2018_3B_AnalyticMS_SR_NDWI_ness_MIN.tif')
+#NDVI
+nf <- stack(n)
+nf.18 <- stack(n[42:59])
+
+nf.mean <- calc(nf,mean,na.rm=T,
+                filename='2017_3B_AnalyticMS_SR_NDVI_ness_MEAN.tif')
+nf.mean <- calc(nf.18,mean,na.rm=T,
+                filename='2018_3B_AnalyticMS_SR_NDVI_ness_MEAN.tif')
+
+nf.max <- calc(nf,max,na.rm=T,
+               filename='2017_3B_AnalyticMS_SR_NDVI_ness_MAX.tif')
+nf.max <- calc(nf.18,max,na.rm=T,
+               filename='2018_3B_AnalyticMS_SR_NDVI_ness_MAX.tif')
+
+# note water mask threshold values based on visual interpretation
+# used seasonal mean because if differences in coverage and hydrology
+reclassify(wf.mean,c(-0.44,Inf,NA),
+                   filename='2017_3B_AnalyticMS_SR_ness_water_mask.tif')
+reclassify(wf.mean,c(-0.44,Inf,NA),
+                   filename='2018_3B_AnalyticMS_SR_ness_water_mask.tif')
+#########################################################################
+############# apply water mask to all files ###############
+m <- stack('2017_3B_AnalyticMS_SR_ness_water_mask.tif',
+           '2018_3B_AnalyticMS_SR_ness_water_mask.tif')
+
+# list all of the NDVI files
+n <- list.files(pattern=glob2rx('*NDVI_ness.tif'),
+                full.names=T,
+                recursive=T)
+
+# list all of the EVI files
+e <- list.files(pattern=glob2rx('*EVI_ness.tif'),
+                full.names=T,
+                recursive=T)
+
+# create index of year vectors
+yr <- as.numeric(substr(e,3,6))-2016
+
+for(i in 1:length(n))
+#for(i in 19:20)
+{
+         mask(raster(n[i]),m[[yr[i]]],overwrite=T,filename=gsub('_NDVI_ness.tif','_NDVI_ness_h2o_mask.tif',n[i]))
+
+         mask(raster(e[i]),m[[yr[i]]],overwrite=T,filename=gsub('_EVI_ness.tif','_EVI_ness_h2o_mask.tif',e[i]))
+
+}
+
+## NOW MOSAIC ALL FILES FROM THE SAME DAY
+# list all of the NDVI files
+n <- list.files(pattern=glob2rx('*_NDVI_ness_h2o_mask.tif'),
+                full.names=T,
+                recursive=T)
+
+# list all of the EVI files
+e <- list.files(pattern=glob2rx('*_EVI_ness_h2o_mask.tif'),
+                full.names=T,
+                recursive=T)
+
+# strip timestamp from filenames
+ts <- strsplit(n,"/")
+ts <- sapply(ts,'[[',3)
+ts <- substr(ts,1,15)
+ts <- strptime(ts,"%Y%m%d_%H%M%S",tz="GMT")
+
+# now correct for local time
+ts <- with_tz(ts,tzone="Asia/Magadan")
+
+d <- date(ts)
+d.ag <- unique(d)
+
+#mosaic by date
+ns <- stack(n)
+es <- stack(e)
+
+for (i in 1:length(d.ag))
+{
+  r <- which(d == d.ag[i])
+  
+  if(length(r)<2) {
+    print('only one file')}
+  
+  else{
+  s <- as.list(ns[[r]])
+  s$fun = mean
+  s$NA.RM=TRUE
+  s$filename = paste('ness_vi_mosaic/',d.ag[i],'_mosaic_3B_AnalyticMS_SR_NDVI_ness_h2o_mask.tif',sep='')
+  s$overwrite=T
+  do.call(mosaic,s)
+  
+  s <- as.list(es[[r]])
+  s$fun = mean
+  s$NA.RM=TRUE
+  s$filename = paste('ness_vi_mosaic/',d.ag[i],'_mosaic_3B_AnalyticMS_SR_EVI_ness_h2o_mask.tif',sep='')
+  s$overwrite=T
+  do.call(mosaic,s)
+  }
+}
+
+#########################################################################
+#########################################################################
+# START HERE FOR ANALYSES - EVERYTHING ABOVE IS PLANET PRE-PROCESSING
+#########################################################################
+#########################################################################
+
+#########################################################################
+########### CREATE CANOPY COVER MAP FROM FIELD OBSERVATIONS #############
+#########################################################################
+
+
+# read panchromatic data
+pan <- raster("L:/data_repo/gis_data/siberia_high_resolution/chersky_area/WV02_20150308004730_103001003F9F4900_15MAR08004730-P1BS-500379646120_01_P002_u16ns3413.tif")
+
+# read stand data
+den <- read.csv("L:/projects/ness_phenology/stand_data.csv", header=T)
+
+d <- SpatialPointsDataFrame(den[,5:4],den,
+                            proj4string = CRS('+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'))
+
+f <- readOGR("L:/projects/ness_phenology/gis",
+             layer="forest")
+t <- extract(pan,d,buffer=15)
+
+dn <- unlist(lapply(t,FUN="mean"))
+
+
+d.norm <- ((dn-450)/(1000-450))+1
+cc <- d$cc.pct
+lb <- d$agb
+m1 <- nls(cc ~ a*exp(-b*d.norm),
+            start=list(a=15000,b=4))
+m2 <- nls(lb ~ a*exp(-b*d.norm),
+          start=list(a=15000,b=4))
+
+#########################################################################
+############# create canopy cover map from field obs ###############
+
+# just upland forest area
+# f.pl <- rasterize(f,m,
+#                   mask=T,
+#                   filename='ness_forest_roi_planet.tif',
+#                   overwrite=T)
+
+f.pl <- raster('ness_forest_roi_planet.tif')
+
+# reproject panchromatic to planet resolution
+# pan.pl <- projectRaster(pan,m,
+#                         method='bilinear',
+#                         filename = 'WV02_20150308004730_planet_ness.tif',
+#                         overwrite=T)
+
+# mask to only water & forest
+# pan.pl <- mask(pan.pl,f.pl,
+#                filename = 'WV02_20150308004730_planet_ness_h2o_mask.tif',
+#                overwrite=T)
+
+pan.pl <- raster('WV02_20150308004730_planet_ness_h2o_mask.tif')
+
+#cc.lm <- exp(coefficients(m2)[1]+log(pan.pl)*coefficients(m2)[2])
+cc.exp <- coefficients(m1)[1]*exp(-coefficients(m1)[2]*(((pan.pl-450)/(1000-450))+1))
+agb.pl <- coefficients(m2)[1]*exp(-coefficients(m2)[2]*(((pan.pl-450)/(1000-450))+1))
+
+writeRaster(agb.pl,
+            filename='agb_planet_exp_model.tif',
+            overwrite=T)
+
+cc.exp <- reclassify(cc.exp,c(100,Inf,100),
+                    filename='canopy_cover_planet_exp_model.tif',
+                    overwrite=T)
+					
+cc.bin <- reclassify(cc.exp,cbind(seq(0,90,10),seq(10,100,10),seq(5,95,10)),
+                    filename='canopy_cover_planet_bin.tif',
+                    overwrite=T)
+#########################################################################
+############# create a figure of model fits ###############
+pdf(file='L:/projects/ness_phenology/figures/canopy_cover_exp_model.pdf',5,5)
+par(cex=1,cex.axis=1.25,cex.lab=1.25)
+plot(dn,cc,pch=16,
+     ylab = "Canopy Cover (%)",
+     xlab = "DN",
+     ylim=c(0,100),
+     xlim=c(400,1000))
+lines(450:1000,lwd=2,lty='dashed',
+      coefficients(m1)[1]*exp(-coefficients(m1)[2]*((((450:1000)-450)/(1000-450))+1)))
+dev.off()
+
+pdf(file='L:/projects/ness_phenology/figures/larch_biomass_exp_model.pdf',5,5)
+par(cex=1,cex.axis=1.25,cex.lab=1.25)
+plot(dn,lb,pch=16,
+     ylab = expression(paste("Larch Biomass (g ",C^-1," ",m^-2,")", sep="")),
+     xlab = "DN",
+     ylim=c(0,3000),
+     xlim=c(400,1000))
+lines(450:1000,lwd=2,lty='dashed',
+      coefficients(m2)[1]*exp(-coefficients(m2)[2]*((((450:1000)-450)/(1000-450))+1)))
+dev.off()
+
+pdf(file='L:/projects/ness_phenology/figures/canopy_cover_obs_vs_pred.pdf',5,5)
+par(cex=1,cex.axis=1.25,cex.lab=1.25)
+plot(cc,predict(m1),pch=16,
+     xlab = "Observed Canopy Cover (%)",
+     ylab = "Predicted Canopy Cover (%)")
+
+abline(lm(predict(m1)~cc),lwd=2,lty='dashed')
+
+text(20,70,paste("r2 =",round(cor(predict(m1),cc),2)))
+dev.off()
+
+pdf(file='L:/projects/ness_phenology/figures/larch_biomass_obs_vs_pred.pdf',5,5)
+par(cex=1,cex.axis=1.25,cex.lab=1.25)
+plot(na.omit(lb),predict(m2),pch=16,
+     xlab = expression(paste("Observed Biomass (g ",C^-1," ",m^-2,")", sep="")),
+     ylab = expression(paste("Predicted Biomass (g ",C^-1," ",m^-2,")", sep="")))
+
+abline(lm(predict(m2)~na.omit(lb)),lwd=2,lty='dashed')
+
+text(450,2000,paste("r2 =",round(cor(predict(m2),na.omit(lb)),2)))
+dev.off()
+
+pdf(file='L:/projects/ness_phenology/figures/canopy_cover_residuals.pdf',5,5)
+par(cex=1,cex.axis=1.25,cex.lab=1.25)
+plot(cc,predict(m1)-cc,pch=16,
+     xlab = "Observed Canopy Cover (%)",
+     ylab = "Predicted Canopy Cover (%)")
+points(cc,exp(predict(m2))-cc,col='gray50',pch=17)
+abline(h=0,lwd=2,lty='dashed')
+legend('topright',c('Exponential','Linear'), bty='n',pch=c(16,17),col=c('black','gray50'))
+dev.off()
+
+
+# #########################################################################
+# #########################################################################
+# START HERE ONCE CANOPY COVER MODEL IS FINALIZED
+# #########################################################################
+# #########################################################################
+
+# read canopy cover map
+cc.exp <- raster('canopy_cover_planet_exp_model.tif')
+cc.bin <- raster('canopy_cover_planet_bin.tif')
+agb.pl <- raster('agb_planet_exp_model.tif')
+# read stand data
+den <- read.csv("L:/projects/ness_phenology/stand_data.csv", header=T)
+
+d <- SpatialPointsDataFrame(den[,5:4],den,
+                            proj4string = CRS('+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'))
+
+# read vi files
+e <- c(list.files(path='ness_vi_mosaic/',
+                pattern=glob2rx('*EVI_ness_h2o_mask.tif'),
+                full.names=T,
+                recursive=T),
+       list.files(pattern=glob2rx('20170831*EVI_ness_h2o_mask.tif'),
+                  full.names=T,
+                  recursive=T))
+
+n <- c(list.files(path='ness_vi_mosaic/',
+                pattern=glob2rx('*NDVI_ness_h2o_mask.tif'),
+                full.names=T,
+                recursive=T),
+       list.files(pattern=glob2rx('20170831*NDVI_ness_h2o_mask.tif'),
+                  full.names=T,
+                  recursive=T))
+
+# create raster stacks
+nf <- stack(n)
+ef <- stack(e)
+
+# extract data for sample stands using 15m buffer from center of stand
+nv <- extract(nf[[1]],d,buffer=15,na.rm=T)
+ev <- extract(ef[[1]],d,buffer=15,na.rm=T)
+
+# make a new matrix of means
+nvs <- unlist(lapply(nv,FUN="mean"))
+nvsd <- unlist(lapply(nv,FUN="sd"))
+evs <- unlist(lapply(ev,FUN="mean"))
+evsd  <- unlist(lapply(ev,FUN="sd"))
+
+# extract for each layer/timstep
+for(i in 2:nlayers(nf))
+{
+  nv <- extract(nf[[i]],d,buffer=15,na.rm=T) 
+  ev <- extract(ef[[i]],d,buffer=15,na.rm=T)
+  
+  nvs <- cbind(nvs,
+               unlist(lapply(nv,FUN="mean")))
+  nvsd <- cbind(nvsd,
+               unlist(lapply(nv,FUN="sd")))
+  evs <- cbind(evs,
+               unlist(lapply(ev,FUN="mean")))
+  evsd <- cbind(evsd,
+               unlist(lapply(ev,FUN="sd")))
+  
+}
+
+# strip timestamp from filenames
+ts <- strsplit(n,"/")
+ts <- sapply(ts,'[[',2)
+ts <- substr(ts,1,10)
+ts <- c(strptime(ts[1:19],"%Y-%m-%d",tz="GMT"),
+        strptime(substr(ts[20],1,8),"%Y%m%d",tz="GMT"))
+
+# correct for local time
+ts <- with_tz(ts,tzone="Asia/Magadan")
+
+# calculate fractional julian day
+fjday <- julian(ts,origin = as.POSIXct('2017-01-01', tz = "Asia/Magadan"))
+
+# set colnames with timestamp
+colnames(nvs) <- as.character(ts)
+colnames(evs) <- as.character(ts)
+
+#####################################################
+## subset to exclude May & sept (e.g. only June-Aug)
+## this also excludes data with haze or other atmospheric effects as determined via visual inspection of imagery
+s <- c(2,5,6,20,10)
+ts1 <- ts[s]
+fjday1 <- fjday[s]
+nvs1 <- nvs[,s]
+nvsd1 <- nvsd[,s]
+evs1 <- evs[,s]
+evsd1 <- evsd[,s]
+nf1 <- nf[[s]]
+ef1 <- ef[[s]]
+
+# ###########################################
+# # extract data for phenology modeling
+# 
+# p.dat <- cbind(rep(1:ncell(nf1[[1]]),nlayers(nf1)),
+#                rep(coordinates(nf1)[,1],nlayers(nf1)),
+#                rep(coordinates(nf1)[,2],nlayers(nf1)),
+#                rep(fjday1,each=ncell(nf1)),
+#                as.vector(getValues(nf1)),
+#                as.vector(getValues(ef1)),
+#                rep(getValues(cc.exp),nlayers(nf1)),
+# 			   rep(getValues(agb.pl),nlayers(nf1)))
+# 
+# colnames(p.dat) <- c("cell","x.coord","y.coord","jday","ndvi","evi","cnpy.cov","agb")
+# # remove NA values
+# p.dat <- na.omit(p.dat)
+# 
+# # write data to csv file
+# write.csv(p.dat,file="L:/projects/ness_phenology/phenology_model_data.csv",
+#           row.names=F)
+# 
+# removeTmpFiles(h=0)
+###########################################
+# analyze some data
+
+## canopy cover vs. biomass
+z <- lm(d$agb~d$cc.pct)
+pdf(file='L:/projects/ness_phenology/figures/larch_biomass_vs_canopy_cov.pdf',5,5)
+par(cex=1,cex.axis=1.25,cex.lab=1.25,mar=c(5,5,4,2))
+plot(d$cc.pct,d$agb,pch=16,
+     xlab = "Canopy Cover (%)",
+     ylab = expression(paste("Larch Biomass (g ",C^-1," ",m^-2,")", sep="")))
+
+segments(d$cc.pct,d$agb-d$agb.se,d$cc.pct,d$agb+d$agb.se)
+segments(d$cc.pct-d$SE,d$agb,d$cc.pct+d$SE,d$agb)
+
+abline(lm(d$agb~d$cc.pct),lwd=2,lty='dashed')
+
+text(20,2500,paste("r2 =",round(summary(z)$adj.r.squared,2)))
+dev.off()
+
+# zonal stats for entire watershed
+ws <- zonal(nf1,cc.bin,fun='mean',na.rm=T)
+ws.sd <- zonal(nf1,cc.bin,fun='sd',na.rm=T)
+colnames(ws) <- c("canopy",fjday1)
+
+wse <- zonal(ef1,cc.bin,fun='mean',na.rm=T)
+wse.sd <- zonal(ef1,cc.bin,fun='sd',na.rm=T)
+colnames(wse) <- c("canopy",fjday1)
+
+pdf(file='L:/projects/ness_phenology/figures/predicted_canopy_vs_ndvi.pdf',5,5)
+par(cex=1,cex.axis=1.25,cex.lab=1.25,mar=c(5,5,4,2))
+plot(ws[,1], ws[,2],
+	 xlab = "Canopy Cover (%)",
+	 ylab = "NDVI",
+	 ylim=c(0.25,0.7),
+	 type = 'both')
+	 
+for(i in 3:ncol(ws))
+{
+	lines(ws[,1], ws[,i],
+			lwd = ((11-i)/11)+1,
+			type='b')
+}
+dev.off()
+####################
+# plot(cc.exp,nf1[[6]],
+#      ylim=c(0.2,0.75))
+# points(getValues(cc.exp),getValues(nf1[[1]]),col="blue")
+# points(getValues(cc.exp),getValues(nf1[[10]]),col="red")
+
+#######################################
+#### PLOT SEASONAL VI TRAJECTORIES ####
+#######################################
+######## new figure 6 - six panels with observed and modeled canopy cover #####
+######## scatterplots of observed Canopy Cover and PLanet NDVI
+
+pdf(file='L:/projects/ness_phenology/figures/figure6.pdf',7,10)
+par(cex=1,cex.axis=1.25,cex.lab=1.25,mar=c(0,0,0,0),mfcol=c(3,2),oma=c(5,5,5,2))
+
+# panel A obs canopy vs. NDVI
+plot(d$cc.pct,nvs1[,1],pch=16,
+     ylim=c(0,0.8), xlim=c(0,100),
+	 xaxt = "n",
+	 yaxt= "n")
+axis(2,labels=T,tick=T,las=2)	
+axis(1,labels=F,tick=T)
+
+points(d$cc.pct,nvs1[,2],pch=16,col='blue')
+points(d$cc.pct,nvs1[,3],pch=16,col='red')
+points(d$cc.pct,nvs1[,4],pch=16,col='orange')
+points(d$cc.pct,nvs1[,5],pch=16,col='purple')
+
+segments(d$cc.pct,nvs1[,1]-nvsd[,1],d$cc.pct,nvs1[,1]+nvsd[,1])
+segments(d$cc.pct,nvs1[,2]-nvsd[,2],d$cc.pct,nvs1[,2]+nvsd[,2],col='blue')
+segments(d$cc.pct,nvs1[,3]-nvsd[,3],d$cc.pct,nvs1[,3]+nvsd[,3],col='red')
+segments(d$cc.pct,nvs1[,4]-nvsd[,4],d$cc.pct,nvs1[,4]+nvsd[,4],col='orange')
+segments(d$cc.pct,nvs1[,5]-nvsd[,5],d$cc.pct,nvs1[,5]+nvsd[,5],col='purple')
+
+segments(d$cc.pct-d$SE,nvs1[,1],d$cc.pct+d$SE,nvs1[,1])
+segments(d$cc.pct-d$SE,nvs1[,2],d$cc.pct+d$SE,nvs1[,2],col='blue')
+segments(d$cc.pct-d$SE,nvs1[,3],d$cc.pct+d$SE,nvs1[,3],col='red')
+segments(d$cc.pct-d$SE,nvs1[,4],d$cc.pct+d$SE,nvs1[,4],col='orange')
+segments(d$cc.pct-d$SE,nvs1[,5],d$cc.pct+d$SE,nvs1[,5],col='purple')
+
+legend("bottomleft", bty="n",ncol=5,
+       c("11 June", "27 June", "26 July", "31 August", "29 September"),
+       fill =c("black", "blue", "red", "orange","purple"))
+legend("topright","A",bty="n")
+grid()
+
+# panel B obs canopy vs. EVI
+
+plot(d$cc.pct,evs1[,1],pch=16,
+     ylim=c(0,0.43), xlim=c(0,100),
+     xaxt = "n",
+     yaxt="n",
+     ylab = "EVI")
+
+axis(2,labels=T,tick=T,las=2)	
+axis(1,labels=F,tick=T)
+
+points(d$cc.pct,evs1[,2],pch=16,col='blue')
+points(d$cc.pct,evs1[,3],pch=16,col='red')
+points(d$cc.pct,evs1[,4],pch=16,col='orange')
+points(d$cc.pct,evs1[,5],pch=16,col='purple')
+
+segments(d$cc.pct,evs1[,1]-evsd[,1],d$cc.pct,evs1[,1]+evsd[,1])
+segments(d$cc.pct,evs1[,2]-evsd[,2],d$cc.pct,evs1[,2]+evsd[,2],col='blue')
+segments(d$cc.pct,evs1[,3]-evsd[,3],d$cc.pct,evs1[,3]+evsd[,3],col='red')
+segments(d$cc.pct,evs1[,4]-evsd[,4],d$cc.pct,evs1[,4]+evsd[,4],col='orange')
+segments(d$cc.pct,evs1[,5]-evsd[,5],d$cc.pct,evs1[,5]+evsd[,5],col='purple')
+
+segments(d$cc.pct-d$SE,evs1[,1],d$cc.pct+d$SE,evs1[,1])
+segments(d$cc.pct-d$SE,evs1[,2],d$cc.pct+d$SE,evs1[,2],col='blue')
+segments(d$cc.pct-d$SE,evs1[,3],d$cc.pct+d$SE,evs1[,3],col='red')
+segments(d$cc.pct-d$SE,evs1[,4],d$cc.pct+d$SE,evs1[,4],col='orange')
+segments(d$cc.pct-d$SE,evs1[,5],d$cc.pct+d$SE,evs1[,5],col='purple')
+
+legend("topright","B",bty="n")
+grid()
+
+# panel C obs canopy vs mean growing season NDVI and EVI
+plot(d$cc.pct,rowMeans(nvs1[,1:4]),pch=16,
+     ylim=c(0,0.8),xlim=c(0,100),
+     xlab='Canopy Cover (%)',
+     yaxt="n",
+     ylab='Mean Seasonal VI')
+points(d$cc.pct,rowMeans(evs1[,1:4]),pch=17)
+axis(2,labels=T,tick=T,las=2)	
+
+legend("bottomleft",bty="n",
+       c("NDVI","EVI"),
+       pch=c(16,17))
+legend("topright","C",bty="n")
+grid()
+
+## modeled data 
+# panel D modeled canopy  NDVI 
+
+plot(0,0,col=0,
+     ylim=c(0,0.8), xlim=c(0,100),
+     xaxt = "n",
+     yaxt = "n")
+axis(2,labels=F,tick=T)	
+axis(1,labels=F,tick=T)
+
+polygon(c(ws[,1],rev(ws[,1])),c(ws[,2]-ws.sd[,2],rev(ws[,2]+ws.sd[,2])),
+        col=rgb(t(col2rgb('black',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
+polygon(c(ws[,1],rev(ws[,1])),c(ws[,3]-ws.sd[,3],rev(ws[,3]+ws.sd[,3])),
+        col=rgb(t(col2rgb('blue',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
+polygon(c(ws[,1],rev(ws[,1])),c(ws[,4]-ws.sd[,4],rev(ws[,4]+ws.sd[,4])),
+        col=rgb(t(col2rgb('red',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
+polygon(c(ws[,1],rev(ws[,1])),c(ws[,5]-ws.sd[,5],rev(ws[,5]+ws.sd[,5])),
+        col=rgb(t(col2rgb('orange',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
+polygon(c(ws[,1],rev(ws[,1])),c(ws[,6]-ws.sd[,6],rev(ws[,6]+ws.sd[,6])),
+        col=rgb(t(col2rgb('purple',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
+
+lines(ws[,1],ws[,2],type="b",col='black',pch=16)
+lines(ws[,1],ws[,3],type="b",col='blue',pch=16)
+lines(ws[,1],ws[,4],type="b",col='red',lwd=2,pch=16)
+lines(ws[,1],ws[,5],type="b",col='orange',lwd=2,pch=16)
+lines(ws[,1],ws[,6],type="b",col='purple',lwd=2,pch=16)
+
+
+legend("topright","D",bty="n")
+grid()
+legend("bottomleft", bty="n",ncol=5,
+       c("11 June", "27 June", "26 July", "31 August", "29 September"),
+       fill =c("black", "blue", "red", "orange","purple"))
+
+# panel E modeled canopy  EVI 
+
+plot(0,0,col=0,
+     ylim=c(0,0.43), xlim=c(0,100),
+     xaxt="n",
+     yaxt="n")
+axis(2,labels=F,tick=T)	
+axis(1,labels=F,tick=T)
+
+polygon(c(wse[,1],rev(wse[,1])),c(wse[,2]-wse.sd[,2],rev(wse[,2]+wse.sd[,2])),
+        col=rgb(t(col2rgb('black',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
+polygon(c(wse[,1],rev(wse[,1])),c(wse[,3]-wse.sd[,3],rev(wse[,3]+wse.sd[,3])),
+        col=rgb(t(col2rgb('blue',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
+polygon(c(wse[,1],rev(wse[,1])),c(wse[,4]-wse.sd[,4],rev(wse[,4]+wse.sd[,4])),
+        col=rgb(t(col2rgb('red',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
+polygon(c(wse[,1],rev(wse[,1])),c(wse[,5]-wse.sd[,5],rev(wse[,5]+wse.sd[,5])),
+        col=rgb(t(col2rgb('orange',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
+polygon(c(wse[,1],rev(wse[,1])),c(wse[,6]-wse.sd[,6],rev(wse[,6]+wse.sd[,6])),
+        col=rgb(t(col2rgb('purple',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
+
+lines(wse[,1],wse[,2],type="b",col='black',pch=16)
+lines(wse[,1],wse[,3],type="b",col='blue',pch=16)
+lines(wse[,1],wse[,4],type="b",col='red',lwd=2,pch=16)
+lines(wse[,1],wse[,5],type="b",col='orange',lwd=2,pch=16)
+lines(wse[,1],wse[,6],type="b",col='purple',lwd=2,pch=16)
+
+legend("topright","E",bty="n")
+grid()
+
+dev.off()
+
+###################################################################
+summary(lm(ws[,2]~ls[,1]))
+plot(d$cc.pct,rowMeans(nvs1,na.rm=T),
+     ylim = c(0.4,0.75))
+p.m <- lm(rowMeans(nvs1,na.rm=T)~d$cc.pct)
+
+plot(d$cc.pct,evs[,1],pch=16,
+     ylim=c(0.05,0.35))
+points(d$cc.pct,evs[,3],pch=16,col='gray50')
+
+plot(getValues(cc.exp),getValues(nv[[18]]))
+
+plot(d$agb,nvs[,1],pch=16)
+plot(d$agb,evs[,1],pch=16,col='gray50')
+
+
+############# compare Landsat NDVI with Berner map ###############
+# Berner et al 2012 Larch Biomass Map
+agb <- raster("L:/data_repo/gis_data/Berner_2011_Kolyma_fire_biomass/kolyma_landsat5_larch_AGB_gm2_2007.tif")
+
+# cloud free landsat map from 28 July 2017
+ls <- stack(list.files("L:/data_repo/gis_data/landsat/LC081050122017072801T1-SC20180524140512/",pattern="sr_band",full.names = T))
+
+lsm <- raster("L:/data_repo/gis_data/landsat/LC081050122017072801T1-SC20180524140512/LC08_L1TP_105012_20170728_20170810_01_T1_pixel_qa.tif")
+# calculate ndvi
+ls.n <- (ls[[5]]-ls[[4]])/(ls[[5]]+ls[[4]])
+
+ls.n <- reclassify(ls.n,matrix(c(-Inf,0.4,NA,1,Inf,NA),nrow = 2,byrow = T),
+                   filename="L:/data_repo/gis_data/landsat/LC081050122017072801T1-SC20180524140512/LC081050122017072801T1_NDVI.tif",
+                   overwrite = T)
+
+ls.n <- projectRaster(ls.n,agb,
+                      filename = "L:/data_repo/gis_data/landsat/LC081050122017072801T1-SC20180524140512/LC081050122017072801T1_NDVI_aea.tif",
+                      overwrite = T)
+
+ls.n <- raster("L:/data_repo/gis_data/landsat/LC081050122017072801T1-SC20180524140512/LC081050122017072801T1_NDVI_aea.tif")
+r30 <- lm(getValues(ls.n)~getValues(agb))
+
+ls.f <- extract(ls.n,d)
+
+plot(d$cc.pct,nvs1[,6],pch=16,
+     ylim=c(0.55,0.85))
+points(d$cc.pct,ls.f,pch=16,col='red')
+
+plot(d$agb,nvs1[,6],pch=16,
+     ylim=c(0.55,0.85))
+points(d$agb,ls.f,pch=16,col='red')
+
+l.r <- lm(ls.f~d$cc.pct)
+p.r <- lm(nvs1[,6]~d$cc.pct)
+l.a <- lm(ls.f~d$agb)
+p.a <- lm(nvs1[,6]~d$agb)
+
+pdf(file='L:/projects/ness_phenology/figures/landsat_vs_planet.pdf',5,5)
+
+par(cex=1,cex.axis=1.25,cex.lab=1.25,mar=c(5,5,4,2))
+plot(ls.f,nvs1[,6],pch=16,
+     xlim=c(0.6,0.85),
+     ylim=c(0.6,0.85),
+     xlab = "Landsat8 NDVI",
+     ylab = "PlanetScope NDVI")
+	 abline(0,1,lwd=2,lty='dashed')
+	 dev.off()
+############# create data frame for full phenology model ###############
+
+
+
+
+
+# strip timestamp from filenames
+ts <- strsplit(n,"/")
+ts <- sapply(ts,'[[',4)
+ts <- substr(ts,1,15)
+ts <- strptime(ts,"%Y%m%d_%H%M%S",tz="GMT")
+
+# now correct for local time
+ts <- with_tz(ts,tzone="Asia/Magadan")
+
+# calculate fractional julian day
+fjday <- julian(ts,origin = as.POSIXct('2017-01-01', tz = "Asia/Magadan"))
+
+# read in sample points for preliminary analyses
+s <- readOGR('L:/projects/ness_phenology/gis',
+             layer='cherskiy_veg_pheno_sample')
+
+# something wonky with original layer - but OK for now
+# looks like there was a columns for elevation that we don't want/need
+r <- s@coords[,1:2]
+v <- SpatialPoints(r,proj4string = CRS('+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'))
+
+
+# extract the ndvi and combine date/site info
+nv <- extract(nf,v)
+ev <- extract(ef,v)
+
+colnames(nv) <- fjday
+
+# vector of vegetation types for preliminary analyses
+veg <- c(rep('fs',2),rep('s',14),rep('f',15),rep('fp',10))
+
+# create data frame for modeling
+# as vector extracts by column, and here each column is an image (jday), and each row is a site
+mod.dat <- as.data.frame(as.vector(nv))
+mod.dat$evi <- as.vector(ev)
+mod.dat$doy <- rep(fjday,each=nrow(nv))
+mod.dat$site <-  rep(s@data$Name,41)
+mod.dat$veg <- rep(veg,41)
+names(mod.dat) <- c("ndvi","evi","doy","site","veg")
+
+mod.dat <- na.omit(mod.dat)
+# write to file
+write.csv(mod.dat,file="C:/Users/mloranty/Documents/GitHub/ness_phenology/planet_veg_class_sample.csv",row.names = F)
+
+write.csv(mod.dat,file="L:/projects/ness_phenology/planet_veg_class_sample.csv",row.names = F)
+
+
