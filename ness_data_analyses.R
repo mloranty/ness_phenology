@@ -410,6 +410,9 @@ e <- c(list.files(path='ness_vi_mosaic/',
                 recursive=T),
        list.files(pattern=glob2rx('20170831*EVI_ness_h2o_mask.tif'),
                   full.names=T,
+                  recursive=T),
+       list.files(pattern=glob2rx('20170615*EVI_ness_h2o_mask.tif'),
+                  full.names=T,
                   recursive=T))
 
 n <- c(list.files(path='ness_vi_mosaic/',
@@ -417,6 +420,9 @@ n <- c(list.files(path='ness_vi_mosaic/',
                 full.names=T,
                 recursive=T),
        list.files(pattern=glob2rx('20170831*NDVI_ness_h2o_mask.tif'),
+                  full.names=T,
+                  recursive=T),
+       list.files(pattern=glob2rx('20170615*NDVI_ness_h2o_mask.tif'),
                   full.names=T,
                   recursive=T))
 
@@ -456,7 +462,7 @@ ts <- strsplit(n,"/")
 ts <- sapply(ts,'[[',2)
 ts <- substr(ts,1,10)
 ts <- c(strptime(ts[1:19],"%Y-%m-%d",tz="GMT"),
-        strptime(substr(ts[20],1,8),"%Y%m%d",tz="GMT"))
+        strptime(substr(ts[20:21],1,8),"%Y%m%d",tz="GMT"))
 
 # correct for local time
 ts <- with_tz(ts,tzone="Asia/Magadan")
@@ -471,7 +477,7 @@ colnames(evs) <- as.character(ts)
 #####################################################
 ## subset to exclude May & sept (e.g. only June-Aug)
 ## this also excludes data with haze or other atmospheric effects as determined via visual inspection of imagery
-s <- c(2,5,6,20,10)
+s <- c(21,5,6,7,20)
 ts1 <- ts[s]
 fjday1 <- fjday[s]
 nvs1 <- nvs[,s]
@@ -481,28 +487,7 @@ evsd1 <- evsd[,s]
 nf1 <- nf[[s]]
 ef1 <- ef[[s]]
 
-# ###########################################
-# # extract data for phenology modeling
-# 
-# p.dat <- cbind(rep(1:ncell(nf1[[1]]),nlayers(nf1)),
-#                rep(coordinates(nf1)[,1],nlayers(nf1)),
-#                rep(coordinates(nf1)[,2],nlayers(nf1)),
-#                rep(fjday1,each=ncell(nf1)),
-#                as.vector(getValues(nf1)),
-#                as.vector(getValues(ef1)),
-#                rep(getValues(cc.exp),nlayers(nf1)),
-# 			   rep(getValues(agb.pl),nlayers(nf1)))
-# 
-# colnames(p.dat) <- c("cell","x.coord","y.coord","jday","ndvi","evi","cnpy.cov","agb")
-# # remove NA values
-# p.dat <- na.omit(p.dat)
-# 
-# # write data to csv file
-# write.csv(p.dat,file="L:/projects/ness_phenology/phenology_model_data.csv",
-#           row.names=F)
-# 
-# removeTmpFiles(h=0)
-###########################################
+###################
 # analyze some data
 
 ## canopy cover vs. biomass
@@ -530,70 +515,143 @@ wse <- zonal(ef1,cc.bin,fun='mean',na.rm=T)
 wse.sd <- zonal(ef1,cc.bin,fun='sd',na.rm=T)
 colnames(wse) <- c("canopy",fjday1)
 
-pdf(file='L:/projects/ness_phenology/figures/predicted_canopy_vs_ndvi.pdf',5,5)
-par(cex=1,cex.axis=1.25,cex.lab=1.25,mar=c(5,5,4,2))
-plot(ws[,1], ws[,2],
-	 xlab = "Canopy Cover (%)",
-	 ylab = "NDVI",
-	 ylim=c(0.25,0.7),
-	 type = 'both')
-	 
-for(i in 3:ncol(ws))
-{
-	lines(ws[,1], ws[,i],
-			lwd = ((11-i)/11)+1,
-			type='b')
-}
-dev.off()
-####################
-# plot(cc.exp,nf1[[6]],
-#      ylim=c(0.2,0.75))
-# points(getValues(cc.exp),getValues(nf1[[1]]),col="blue")
-# points(getValues(cc.exp),getValues(nf1[[10]]),col="red")
 
+#######################################
+# examine linear relationships between 
+# canopy cover and NDVI/EVI
+# write stats to table and plot
+# significant relationships in Figure 6
+#######################################
+
+# set up tables to hold vars of interest
+cc.n.obs <- matrix(0,6,5)
+
+row.names(cc.n.obs) <- c(colnames(nvs1),"mean")
+colnames(cc.n.obs) <- c('p','r2','f','int','slope')
+
+cc.e.obs <- cc.n.obs
+cc.n.mod <- cc.n.obs
+cc.e.mod <- cc.n.obs
+
+for(i in 1:5)
+{
+  l <- lm(nvs1[,i]~d$cc.pct)
+  x <- summary(l)
+  cc.n.obs[i,] <- c(x$coefficients[2,4],
+                    x$adj.r.squared,
+                    x$fstatistic[1],
+                    x$coefficients[,1])
+  
+  l <- lm(evs1[,i]~d$cc.pct)
+  x <- summary(l)
+  cc.e.obs[i,] <- c(x$coefficients[2,4],
+                    x$adj.r.squared,
+                    x$fstatistic[1],
+                    x$coefficients[,1])
+  
+  l <- lm(ws[,i+1]~ws[,1])
+  x <- summary(l)
+  cc.n.mod[i,] <- c(x$coefficients[2,4],
+                    x$adj.r.squared,
+                    x$fstatistic[1],
+                    x$coefficients[,1])
+  
+  l <- lm(wse[,i+1]~wse[,1])
+  x <- summary(l)
+  cc.e.mod[i,] <- c(x$coefficients[2,4],
+                    x$adj.r.squared,
+                    x$fstatistic[1],
+                    x$coefficients[,1])
+}
+
+# now for seasonal mean values
+
+l <- lm(rowMeans(nvs1)~d$cc.pct)
+x <- summary(l)
+cc.n.obs[6,] <- c(x$coefficients[2,4],
+                  x$adj.r.squared,
+                  x$fstatistic[1],
+                  x$coefficients[,1])
+
+l <- lm(rowMeans(evs1)~d$cc.pct)
+x <- summary(l)
+cc.e.obs[6,] <- c(x$coefficients[2,4],
+                  x$adj.r.squared,
+                  x$fstatistic[1],
+                  x$coefficients[,1])
+
+l <- lm(rowMeans(ws[,2:6])~ws[,1])
+x <- summary(l)
+cc.n.mod[6,] <- c(x$coefficients[2,4],
+                  x$adj.r.squared,
+                  x$fstatistic[1],
+                  x$coefficients[,1])
+
+l <- lm(rowMeans(wse[,2:6])~wse[,1])
+x <- summary(l)
+cc.e.mod[6,] <- c(x$coefficients[2,4],
+                  x$adj.r.squared,
+                  x$fstatistic[1],
+                  x$coefficients[,1])
+rm(x)
+
+write.csv(cc.n.obs,row.names = T,
+          file='L:/projects/ness_phenology/canopy_vs_ndvi_obs.csv' )
+write.csv(cc.n.mod,row.names = T,
+          file='L:/projects/ness_phenology/canopy_vs_ndvi_mod.csv' )
+write.csv(cc.e.obs,row.names = T,
+          file='L:/projects/ness_phenology/canopy_vs_evi_obs.csv' )
+write.csv(cc.e.mod,row.names = T,
+          file='L:/projects/ness_phenology/canopy_vs_evi_mod.csv' )
 #######################################
 #### PLOT SEASONAL VI TRAJECTORIES ####
 #######################################
-######## new figure 6 - six panels with observed and modeled canopy cover #####
+######## Figure 6 - six panels with observed and modeled canopy cover #####
 ######## scatterplots of observed Canopy Cover and PLanet NDVI
+
+# plot vars
+cl <- c('black','blue','red','orange','purple')
+inst <- 0.05
 
 pdf(file='L:/projects/ness_phenology/figures/figure6.pdf',7,10)
 par(cex=1,cex.axis=1.25,cex.lab=1.25,mar=c(0,0,0,0),mfcol=c(3,2),oma=c(5,5,5,2))
 
 # panel A obs canopy vs. NDVI
-plot(d$cc.pct,nvs1[,1],pch=16,
+plot(0,0,col=0,
      ylim=c(0,0.8), xlim=c(0,100),
 	 xaxt = "n",
 	 yaxt= "n")
 axis(2,labels=T,tick=T,las=2)	
 axis(1,labels=F,tick=T)
 
-points(d$cc.pct,nvs1[,2],pch=16,col='blue')
-points(d$cc.pct,nvs1[,3],pch=16,col='red')
-points(d$cc.pct,nvs1[,4],pch=16,col='orange')
-points(d$cc.pct,nvs1[,5],pch=16,col='purple')
+for(i in 1:5)
+{
+  points(d$cc.pct,nvs1[,i],pch=16,col=cl[i])
+  segments(d$cc.pct,nvs1[,i]-nvsd[,i],d$cc.pct,nvs1[,i]+nvsd[,i],col=cl[i])
+  segments(d$cc.pct-d$SE,nvs1[,i],d$cc.pct+d$SE,nvs1[,i],col=cl[i])
+}
 
-segments(d$cc.pct,nvs1[,1]-nvsd[,1],d$cc.pct,nvs1[,1]+nvsd[,1])
-segments(d$cc.pct,nvs1[,2]-nvsd[,2],d$cc.pct,nvs1[,2]+nvsd[,2],col='blue')
-segments(d$cc.pct,nvs1[,3]-nvsd[,3],d$cc.pct,nvs1[,3]+nvsd[,3],col='red')
-segments(d$cc.pct,nvs1[,4]-nvsd[,4],d$cc.pct,nvs1[,4]+nvsd[,4],col='orange')
-segments(d$cc.pct,nvs1[,5]-nvsd[,5],d$cc.pct,nvs1[,5]+nvsd[,5],col='purple')
+#### need to figure out how to plot significant regression lines
+# also plot obs vs predicted canopy cover
+# and planet vs landsat NDVI/EVI, and perhaps field obs of canopy cover vs. landsat ndvi
+r <- which(cc.n.obs[1:5,1]<0.05)
+for(i in 1:5)
+{
+  ifelse(cc.n.obs[i,1]<0.05,
+     abline(a=cc.n.obs[i,4],b=cc.n.obs[i,5],col=cl[i]),
+     abline(a=cc.n.obs[i,4],b=cc.n.obs[i,5],col=0))
+}
 
-segments(d$cc.pct-d$SE,nvs1[,1],d$cc.pct+d$SE,nvs1[,1])
-segments(d$cc.pct-d$SE,nvs1[,2],d$cc.pct+d$SE,nvs1[,2],col='blue')
-segments(d$cc.pct-d$SE,nvs1[,3],d$cc.pct+d$SE,nvs1[,3],col='red')
-segments(d$cc.pct-d$SE,nvs1[,4],d$cc.pct+d$SE,nvs1[,4],col='orange')
-segments(d$cc.pct-d$SE,nvs1[,5],d$cc.pct+d$SE,nvs1[,5],col='purple')
-
-legend("bottomleft", bty="n",ncol=5,
-       c("11 June", "27 June", "26 July", "31 August", "29 September"),
-       fill =c("black", "blue", "red", "orange","purple"))
-legend("topright","A",bty="n")
 grid()
+legend("bottomleft", bg="white",box.col="white",ncol=3,
+       c("15 June", "27 June", "26 July", "16 Aug", "31 Aug"),
+       fill =cl,inset=inst)
+legend("topright","A",bg="white",box.col="white",cex=1.25,inset=inst)
+
 
 # panel B obs canopy vs. EVI
 
-plot(d$cc.pct,evs1[,1],pch=16,
+plot(0,0,col=0,
      ylim=c(0,0.43), xlim=c(0,100),
      xaxt = "n",
      yaxt="n",
@@ -602,22 +660,12 @@ plot(d$cc.pct,evs1[,1],pch=16,
 axis(2,labels=T,tick=T,las=2)	
 axis(1,labels=F,tick=T)
 
-points(d$cc.pct,evs1[,2],pch=16,col='blue')
-points(d$cc.pct,evs1[,3],pch=16,col='red')
-points(d$cc.pct,evs1[,4],pch=16,col='orange')
-points(d$cc.pct,evs1[,5],pch=16,col='purple')
-
-segments(d$cc.pct,evs1[,1]-evsd[,1],d$cc.pct,evs1[,1]+evsd[,1])
-segments(d$cc.pct,evs1[,2]-evsd[,2],d$cc.pct,evs1[,2]+evsd[,2],col='blue')
-segments(d$cc.pct,evs1[,3]-evsd[,3],d$cc.pct,evs1[,3]+evsd[,3],col='red')
-segments(d$cc.pct,evs1[,4]-evsd[,4],d$cc.pct,evs1[,4]+evsd[,4],col='orange')
-segments(d$cc.pct,evs1[,5]-evsd[,5],d$cc.pct,evs1[,5]+evsd[,5],col='purple')
-
-segments(d$cc.pct-d$SE,evs1[,1],d$cc.pct+d$SE,evs1[,1])
-segments(d$cc.pct-d$SE,evs1[,2],d$cc.pct+d$SE,evs1[,2],col='blue')
-segments(d$cc.pct-d$SE,evs1[,3],d$cc.pct+d$SE,evs1[,3],col='red')
-segments(d$cc.pct-d$SE,evs1[,4],d$cc.pct+d$SE,evs1[,4],col='orange')
-segments(d$cc.pct-d$SE,evs1[,5],d$cc.pct+d$SE,evs1[,5],col='purple')
+for(i in 1:5)
+{
+  points(d$cc.pct,evs1[,i],pch=16,col=cl[i])
+  segments(d$cc.pct,evs1[,i]-evsd[,i],d$cc.pct,evs1[,i]+evsd[,i],col=cl[i])
+  segments(d$cc.pct-d$SE,evs1[,i],d$cc.pct+d$SE,evs1[,i],col=cl[i])
+}
 
 legend("topright","B",bty="n")
 grid()
@@ -630,6 +678,13 @@ plot(d$cc.pct,rowMeans(nvs1[,1:4]),pch=16,
      ylab='Mean Seasonal VI')
 points(d$cc.pct,rowMeans(evs1[,1:4]),pch=17)
 axis(2,labels=T,tick=T,las=2)	
+
+# not sure if these are necessary - sd for VI is conveyed in panels above
+segments(d$cc.pct-d$SE,rowMeans(nvs1[,1:4]),d$cc.pct+d$SE,rowMeans(nvs1[,1:4]))
+segments(d$cc.pct-d$SE,rowMeans(evs1[,1:4]),d$cc.pct+d$SE,rowMeans(evs1[,1:4]))
+
+segments(d$cc.pct,rowMeans(nvs1[,1:4])-apply(nvs1[,1:4],1,sd),d$cc.pct,rowMeans(nvs1[,1:4])+apply(nvs1[,1:4],1,sd))
+segments(d$cc.pct,rowMeans(evs1[,1:4])-apply(evs1[,1:4],1,sd),d$cc.pct,rowMeans(evs1[,1:4])+apply(evs1[,1:4],1,sd))
 
 legend("bottomleft",bty="n",
        c("NDVI","EVI"),
@@ -647,30 +702,19 @@ plot(0,0,col=0,
 axis(2,labels=F,tick=T)	
 axis(1,labels=F,tick=T)
 
-polygon(c(ws[,1],rev(ws[,1])),c(ws[,2]-ws.sd[,2],rev(ws[,2]+ws.sd[,2])),
-        col=rgb(t(col2rgb('black',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
-polygon(c(ws[,1],rev(ws[,1])),c(ws[,3]-ws.sd[,3],rev(ws[,3]+ws.sd[,3])),
-        col=rgb(t(col2rgb('blue',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
-polygon(c(ws[,1],rev(ws[,1])),c(ws[,4]-ws.sd[,4],rev(ws[,4]+ws.sd[,4])),
-        col=rgb(t(col2rgb('red',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
-polygon(c(ws[,1],rev(ws[,1])),c(ws[,5]-ws.sd[,5],rev(ws[,5]+ws.sd[,5])),
-        col=rgb(t(col2rgb('orange',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
-polygon(c(ws[,1],rev(ws[,1])),c(ws[,6]-ws.sd[,6],rev(ws[,6]+ws.sd[,6])),
-        col=rgb(t(col2rgb('purple',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
-
-lines(ws[,1],ws[,2],type="b",col='black',pch=16)
-lines(ws[,1],ws[,3],type="b",col='blue',pch=16)
-lines(ws[,1],ws[,4],type="b",col='red',lwd=2,pch=16)
-lines(ws[,1],ws[,5],type="b",col='orange',lwd=2,pch=16)
-lines(ws[,1],ws[,6],type="b",col='purple',lwd=2,pch=16)
+for(i in 1:5)
+{
+  polygon(c(ws[,1],rev(ws[,1])),c(ws[,i+1]-ws.sd[,i+1],rev(ws[,i+1]+ws.sd[,i+1])),
+          col=rgb(t(col2rgb(cl[i],alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA) 
+  
+  lines(ws[,1],ws[,i+1],type="b",col=cl[i],pch=16)
+}
 
 
 legend("topright","D",bty="n")
 grid()
-legend("bottomleft", bty="n",ncol=5,
-       c("11 June", "27 June", "26 July", "31 August", "29 September"),
-       fill =c("black", "blue", "red", "orange","purple"))
 
+####################################################
 # panel E modeled canopy  EVI 
 
 plot(0,0,col=0,
@@ -680,28 +724,37 @@ plot(0,0,col=0,
 axis(2,labels=F,tick=T)	
 axis(1,labels=F,tick=T)
 
-polygon(c(wse[,1],rev(wse[,1])),c(wse[,2]-wse.sd[,2],rev(wse[,2]+wse.sd[,2])),
-        col=rgb(t(col2rgb('black',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
-polygon(c(wse[,1],rev(wse[,1])),c(wse[,3]-wse.sd[,3],rev(wse[,3]+wse.sd[,3])),
-        col=rgb(t(col2rgb('blue',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
-polygon(c(wse[,1],rev(wse[,1])),c(wse[,4]-wse.sd[,4],rev(wse[,4]+wse.sd[,4])),
-        col=rgb(t(col2rgb('red',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
-polygon(c(wse[,1],rev(wse[,1])),c(wse[,5]-wse.sd[,5],rev(wse[,5]+wse.sd[,5])),
-        col=rgb(t(col2rgb('orange',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
-polygon(c(wse[,1],rev(wse[,1])),c(wse[,6]-wse.sd[,6],rev(wse[,6]+wse.sd[,6])),
-        col=rgb(t(col2rgb('purple',alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA)
-
-lines(wse[,1],wse[,2],type="b",col='black',pch=16)
-lines(wse[,1],wse[,3],type="b",col='blue',pch=16)
-lines(wse[,1],wse[,4],type="b",col='red',lwd=2,pch=16)
-lines(wse[,1],wse[,5],type="b",col='orange',lwd=2,pch=16)
-lines(wse[,1],wse[,6],type="b",col='purple',lwd=2,pch=16)
+for(i in 1:5)
+{
+  polygon(c(wse[,1],rev(wse[,1])),c(wse[,i+1]-wse.sd[,i+1],rev(wse[,i+1]+wse.sd[,i+1])),
+          col=rgb(t(col2rgb(cl[i],alpha=F)),alpha = 64,maxColorValue = 255),density=NULL,border=NA) 
+  
+  lines(wse[,1],wse[,i+1],type="b",col=cl[i],pch=16)
+}
 
 legend("topright","E",bty="n")
 grid()
 
-dev.off()
+# panel F model mean season VI
+plot(ws[,1],rowMeans(ws[,2:5]),pch=16,
+     ylim=c(0,0.8),xlim=c(0,100),
+     xlab='Canopy Cover (%)',
+     yaxt="n",
+     ylab='Mean Seasonal VI')
+points(wse[,1],rowMeans(wse[,2:5]),pch=17)
+axis(2,labels=F,tick=T,las=2)	
 
+# not sure if these are necessary - sd for VI is conveyed in panels above
+
+
+legend("bottomleft",bty="n",
+       c("NDVI","EVI"),
+       pch=c(16,17))
+legend("topright","F",bty="n")
+grid()
+
+dev.off()
+###################################################################
 ###################################################################
 summary(lm(ws[,2]~ls[,1]))
 plot(d$cc.pct,rowMeans(nvs1,na.rm=T),
