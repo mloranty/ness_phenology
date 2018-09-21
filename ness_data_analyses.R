@@ -279,9 +279,10 @@ d <- SpatialPointsDataFrame(den[,5:4],den,
 f <- readOGR("L:/projects/ness_phenology/gis",
              layer="forest")
 t <- extract(pan,d,buffer=15)
+t2 <- extract(pan,d,buffer=15,fun=sd)
 
 dn <- unlist(lapply(t,FUN="mean"))
-
+dn.sd <- unlist(lapply(t,FUN="sd"))
 
 d.norm <- ((dn-450)/(1000-450))+1
 cc <- d$cc.pct
@@ -332,15 +333,21 @@ cc.bin <- reclassify(cc.exp,cbind(seq(0,90,10),seq(10,100,10),seq(5,95,10)),
                     overwrite=T)
 #########################################################################
 ############# create a figure of model fits ###############
-pdf(file='L:/projects/ness_phenology/figures/canopy_cover_exp_model.pdf',5,5)
+pdf(file='L:/projects/ness_phenology/figures/fig4_canopy_cover_exp_model.pdf',5,5)
 par(cex=1,cex.axis=1.25,cex.lab=1.25)
 plot(dn,cc,pch=16,
-     ylab = "Canopy Cover (%)",
+     ylab = "",yaxt="n",
      xlab = "DN",
      ylim=c(0,100),
      xlim=c(400,1000))
-lines(450:1000,lwd=2,lty='dashed',
-      coefficients(m1)[1]*exp(-coefficients(m1)[2]*((((450:1000)-450)/(1000-450))+1)))
+lines(400:1000,lwd=2,lty='dashed',
+      coefficients(m1)[1]*exp(-coefficients(m1)[2]*((((400:1000)-450)/(1000-450))+1)))
+
+axis(2,labels=T,tick=T,las=2)	
+mtext("Canopy Cover (%)",side=2,line=3,cex=1.25)
+
+segments(dn,d$cc.pct-d$SE,dn,d$cc.pct+d$SE,lwd=0.5)
+segments(dn-dn.sd,d$cc.pct,dn+dn.sd,d$cc.pct,lwd=0.5)
 dev.off()
 
 pdf(file='L:/projects/ness_phenology/figures/larch_biomass_exp_model.pdf',5,5)
@@ -354,17 +361,44 @@ lines(450:1000,lwd=2,lty='dashed',
       coefficients(m2)[1]*exp(-coefficients(m2)[2]*((((450:1000)-450)/(1000-450))+1)))
 dev.off()
 
-pdf(file='L:/projects/ness_phenology/figures/canopy_cover_obs_vs_pred.pdf',5,5)
-par(cex=1,cex.axis=1.25,cex.lab=1.25)
+##################################################################################
+################ canopy cover model fit figure #################
+po <- lm(predict(m1)~cc)
+cr <- lm(predict(m1)-cc~cc)
+pdf(file='L:/projects/ness_phenology/figures/fig6_canopy_cover_model_fit.pdf',5,8)
+par(cex=1,cex.axis=1.25,cex.lab=1.25,mfrow=c(2,1),mar=c(0,0,0,0),oma=c(5,5,5,2))
 plot(cc,predict(m1),pch=16,
-     xlab = "Observed Canopy Cover (%)",
-     ylab = "Predicted Canopy Cover (%)")
-
+     xlim=c(0,100),
+     ylim=c(0,100),
+     xaxt="n",
+     yaxt="n",ylab="")
+axis(2,labels=T,tick=T,las=2)	
+axis(1,labels=F,tick=T)
+mtext("Predicted Canopy Cover (%)",side=2,line=3,cex=1.25)
 abline(lm(predict(m1)~cc),lwd=2,lty='dashed')
 
-text(20,70,paste("r2 =",round(cor(predict(m1),cc),2)))
+text(20,70,paste("r2 =",round(summary(po)$adj.r.squared,2)))
+legend("bottomright","A",bg="white",box.col="white",cex=1.25,inset=inst)
+
+## residuals ##
+plot(cc,predict(m1)-cc,pch=16,
+     xlim=c(0,100),
+     ylim=c(-42,32),
+     xaxt="n",
+     yaxt="n")
+axis(2,labels=T,tick=T,las=2)	
+axis(1,labels=T,tick=T)
+mtext("Residual Canopy Cover (%)",side=2,line=3,cex=1.25)
+mtext("Observed Canopy Cover (%)",side=1,line=3,cex=1.25)
+abline(lm(predict(m1)-cc~cc),lwd=2,lty='dashed')
+
+text(70,20,paste("r2 =",round(summary(cr)$adj.r.squared,2)))
+#points(cc,exp(predict(m2))-cc,col='gray50',pch=17)
+abline(h=0,lwd=0.5)
+legend("bottomright","B",bg="white",box.col="white",cex=1.25,inset=inst)
 dev.off()
 
+###
 pdf(file='L:/projects/ness_phenology/figures/larch_biomass_obs_vs_pred.pdf',5,5)
 par(cex=1,cex.axis=1.25,cex.lab=1.25)
 plot(na.omit(lb),predict(m2),pch=16,
@@ -375,16 +409,7 @@ abline(lm(predict(m2)~na.omit(lb)),lwd=2,lty='dashed')
 
 text(450,2000,paste("r2 =",round(cor(predict(m2),na.omit(lb)),2)))
 dev.off()
-
-pdf(file='L:/projects/ness_phenology/figures/canopy_cover_residuals.pdf',5,5)
-par(cex=1,cex.axis=1.25,cex.lab=1.25)
-plot(cc,predict(m1)-cc,pch=16,
-     xlab = "Observed Canopy Cover (%)",
-     ylab = "Predicted Canopy Cover (%)")
-points(cc,exp(predict(m2))-cc,col='gray50',pch=17)
-abline(h=0,lwd=2,lty='dashed')
-legend('topright',c('Exponential','Linear'), bty='n',pch=c(16,17),col=c('black','gray50'))
-dev.off()
+###########################################################################
 
 
 # #########################################################################
@@ -490,22 +515,27 @@ ef1 <- ef[[s]]
 ###################
 # analyze some data
 
-## canopy cover vs. biomass
+############################## Figure 3 canopy cover vs. biomass ############################
 z <- lm(d$agb~d$cc.pct)
-pdf(file='L:/projects/ness_phenology/figures/larch_biomass_vs_canopy_cov.pdf',5,5)
+pdf(file='L:/projects/ness_phenology/figures/fig3_larch_biomass_vs_canopy_cov.pdf',5,5)
 par(cex=1,cex.axis=1.25,cex.lab=1.25,mar=c(5,5,4,2))
 plot(d$cc.pct,d$agb,pch=16,
      xlab = "Canopy Cover (%)",
-     ylab = expression(paste("Larch Biomass (g ",C^-1," ",m^-2,")", sep="")))
+     yaxt="n",ylab="")
 
-segments(d$cc.pct,d$agb-d$agb.se,d$cc.pct,d$agb+d$agb.se)
-segments(d$cc.pct-d$SE,d$agb,d$cc.pct+d$SE,d$agb)
+axis(2,labels=T,tick=T,las=2)	
+
+mtext(expression(paste("Larch Biomass (g ",C^-1," ",m^-2,")", sep="")),side=2,line=3.5,cex=1.25)
+
+segments(d$cc.pct,d$agb-d$agb.se,d$cc.pct,d$agb+d$agb.se,lwd=0.5)
+segments(d$cc.pct-d$SE,d$agb,d$cc.pct+d$SE,d$agb,lwd=0.5)
 
 abline(lm(d$agb~d$cc.pct),lwd=2,lty='dashed')
 
 text(20,2500,paste("r2 =",round(summary(z)$adj.r.squared,2)))
 dev.off()
 
+####################################################################################
 # zonal stats for entire watershed
 ws <- zonal(nf1,cc.bin,fun='mean',na.rm=T)
 ws.sd <- zonal(nf1,cc.bin,fun='sd',na.rm=T)
@@ -603,17 +633,21 @@ write.csv(cc.e.obs,row.names = T,
           file='L:/projects/ness_phenology/canopy_vs_evi_obs.csv' )
 write.csv(cc.e.mod,row.names = T,
           file='L:/projects/ness_phenology/canopy_vs_evi_mod.csv' )
-#######################################
-#### PLOT SEASONAL VI TRAJECTORIES ####
-#######################################
-######## Figure 6 - six panels with observed and modeled canopy cover #####
+
+###########################################################################
+#### PLOT SEASONAL VI TRAJECTORIES ########################################
+###########################################################################
+######## Figure 8 - six panels with observed and modeled canopy cover #####
 ######## scatterplots of observed Canopy Cover and PLanet NDVI
+###########################################################################
 
 # plot vars
 cl <- c('black','blue','red','orange','purple')
 inst <- 0.05
+wc <- 0.5
 
-pdf(file='L:/projects/ness_phenology/figures/figure6.pdf',7,10)
+pdf(file="L:/projects/ness_phenology/figures/fig8.pdf",7,10)
+
 par(cex=1,cex.axis=1.25,cex.lab=1.25,mar=c(0,0,0,0),mfcol=c(3,2),oma=c(5,5,5,2))
 
 # panel A obs canopy vs. NDVI
@@ -623,30 +657,30 @@ plot(0,0,col=0,
 	 yaxt= "n")
 axis(2,labels=T,tick=T,las=2)	
 axis(1,labels=F,tick=T)
-
+mtext("NDVI",side=2,line=3)
 for(i in 1:5)
 {
   points(d$cc.pct,nvs1[,i],pch=16,col=cl[i])
-  segments(d$cc.pct,nvs1[,i]-nvsd[,i],d$cc.pct,nvs1[,i]+nvsd[,i],col=cl[i])
-  segments(d$cc.pct-d$SE,nvs1[,i],d$cc.pct+d$SE,nvs1[,i],col=cl[i])
+  segments(d$cc.pct,nvs1[,i]-nvsd[,i],d$cc.pct,nvs1[,i]+nvsd[,i],col=cl[i],lwd=wc)
+  segments(d$cc.pct-d$SE,nvs1[,i],d$cc.pct+d$SE,nvs1[,i],col=cl[i],lwd=wc)
 }
 
 #### need to figure out how to plot significant regression lines
 # also plot obs vs predicted canopy cover
 # and planet vs landsat NDVI/EVI, and perhaps field obs of canopy cover vs. landsat ndvi
 r <- which(cc.n.obs[1:5,1]<0.05)
-for(i in 1:5)
+
+for(i in 1:length(r))
 {
-  ifelse(cc.n.obs[i,1]<0.05,
-     abline(a=cc.n.obs[i,4],b=cc.n.obs[i,5],col=cl[i]),
-     abline(a=cc.n.obs[i,4],b=cc.n.obs[i,5],col=0))
+     abline(a=cc.n.obs[r[i],4],b=cc.n.obs[r[i],5],col=cl[r[i]])
 }
 
 grid()
+legend("bottomright","A",bg="white",box.col="white",cex=1.25,inset=inst)
 legend("bottomleft", bg="white",box.col="white",ncol=3,
        c("15 June", "27 June", "26 July", "16 Aug", "31 Aug"),
-       fill =cl,inset=inst)
-legend("topright","A",bg="white",box.col="white",cex=1.25,inset=inst)
+       fill =cl,inset=inst,cex=1.25)
+
 
 
 # panel B obs canopy vs. EVI
@@ -659,15 +693,24 @@ plot(0,0,col=0,
 
 axis(2,labels=T,tick=T,las=2)	
 axis(1,labels=F,tick=T)
+mtext("EVI",side=2,line=3)
 
 for(i in 1:5)
 {
   points(d$cc.pct,evs1[,i],pch=16,col=cl[i])
-  segments(d$cc.pct,evs1[,i]-evsd[,i],d$cc.pct,evs1[,i]+evsd[,i],col=cl[i])
-  segments(d$cc.pct-d$SE,evs1[,i],d$cc.pct+d$SE,evs1[,i],col=cl[i])
+  segments(d$cc.pct,evs1[,i]-evsd[,i],d$cc.pct,evs1[,i]+evsd[,i],col=cl[i],lwd=wc)
+  segments(d$cc.pct-d$SE,evs1[,i],d$cc.pct+d$SE,evs1[,i],col=cl[i],lwd=wc)
 }
 
-legend("topright","B",bty="n")
+r <- which(cc.n.obs[1:5,1]<0.05)
+
+for(i in 1:length(r))
+{
+  abline(a=cc.e.obs[r[i],4],b=cc.n.obs[r[i],5],col=cl[r[i]])
+}
+
+legend("bottomright","B",bg="white",box.col="white",cex=1.25,inset=inst)
+
 grid()
 
 # panel C obs canopy vs mean growing season NDVI and EVI
@@ -678,18 +721,24 @@ plot(d$cc.pct,rowMeans(nvs1[,1:4]),pch=16,
      ylab='Mean Seasonal VI')
 points(d$cc.pct,rowMeans(evs1[,1:4]),pch=17)
 axis(2,labels=T,tick=T,las=2)	
+mtext("Season Mean VI",side=2,line=3)
+mtext("Observed Canopy Cover (%)",side=1,line=3)
+## only if these results are significant ##
+abline(a=cc.n.obs[6,4],b=cc.n.obs[6,5],col="black")
+abline(a=cc.e.obs[6,4],b=cc.e.obs[6,5],col="black")
 
 # not sure if these are necessary - sd for VI is conveyed in panels above
-segments(d$cc.pct-d$SE,rowMeans(nvs1[,1:4]),d$cc.pct+d$SE,rowMeans(nvs1[,1:4]))
-segments(d$cc.pct-d$SE,rowMeans(evs1[,1:4]),d$cc.pct+d$SE,rowMeans(evs1[,1:4]))
-
-segments(d$cc.pct,rowMeans(nvs1[,1:4])-apply(nvs1[,1:4],1,sd),d$cc.pct,rowMeans(nvs1[,1:4])+apply(nvs1[,1:4],1,sd))
-segments(d$cc.pct,rowMeans(evs1[,1:4])-apply(evs1[,1:4],1,sd),d$cc.pct,rowMeans(evs1[,1:4])+apply(evs1[,1:4],1,sd))
+# segments(d$cc.pct-d$SE,rowMeans(nvs1[,1:4]),d$cc.pct+d$SE,rowMeans(nvs1[,1:4]))
+# segments(d$cc.pct-d$SE,rowMeans(evs1[,1:4]),d$cc.pct+d$SE,rowMeans(evs1[,1:4]))
+# 
+# segments(d$cc.pct,rowMeans(nvs1[,1:4])-apply(nvs1[,1:4],1,sd),d$cc.pct,rowMeans(nvs1[,1:4])+apply(nvs1[,1:4],1,sd))
+# segments(d$cc.pct,rowMeans(evs1[,1:4])-apply(evs1[,1:4],1,sd),d$cc.pct,rowMeans(evs1[,1:4])+apply(evs1[,1:4],1,sd))
 
 legend("bottomleft",bty="n",
        c("NDVI","EVI"),
-       pch=c(16,17))
-legend("topright","C",bty="n")
+       pch=c(16,17),inset=inst,cex=1.25)
+legend("bottomright","C",bg="white",box.col="white",cex=1.25,inset=inst)
+
 grid()
 
 ## modeled data 
@@ -710,8 +759,15 @@ for(i in 1:5)
   lines(ws[,1],ws[,i+1],type="b",col=cl[i],pch=16)
 }
 
+r <- which(cc.n.mod[1:5,1]<0.05)
 
-legend("topright","D",bty="n")
+for(i in 1:length(r))
+{
+  abline(a=cc.n.mod[r[i],4],b=cc.n.mod[r[i],5],col=cl[r[i]])
+}
+
+legend("bottomright","D",bg="white",box.col="white",cex=1.25,inset=inst)
+
 grid()
 
 ####################################################
@@ -732,57 +788,65 @@ for(i in 1:5)
   lines(wse[,1],wse[,i+1],type="b",col=cl[i],pch=16)
 }
 
-legend("topright","E",bty="n")
+r <- which(cc.e.mod[1:5,1]<0.05)
+
+for(i in 1:length(r))
+{
+  abline(a=cc.e.mod[r[i],4],b=cc.e.mod[r[i],5],col=cl[r[i]])
+}
+
+legend("bottomright","E",bg="white",box.col="white",cex=1.25,inset=inst)
+
 grid()
 
 # panel F model mean season VI
-plot(ws[,1],rowMeans(ws[,2:5]),pch=16,
+plot(ws[,1],rowMeans(ws[,2:5]),pch=16,type="b",
      ylim=c(0,0.8),xlim=c(0,100),
      xlab='Canopy Cover (%)',
      yaxt="n",
      ylab='Mean Seasonal VI')
-points(wse[,1],rowMeans(wse[,2:5]),pch=17)
+lines(wse[,1],rowMeans(wse[,2:5]),type="b",pch=17)
 axis(2,labels=F,tick=T,las=2)	
-
+mtext("Modeled Canopy Cover (%)",side=1,line=3)
 # not sure if these are necessary - sd for VI is conveyed in panels above
 
 
 legend("bottomleft",bty="n",
        c("NDVI","EVI"),
-       pch=c(16,17))
-legend("topright","F",bty="n")
+       pch=c(16,17),inset=inst,cex=1.25)
+legend("bottomright","F",bg="white",box.col="white",cex=1.25,inset=inst)
+
 grid()
 
 dev.off()
 ###################################################################
-###################################################################
-summary(lm(ws[,2]~ls[,1]))
-plot(d$cc.pct,rowMeans(nvs1,na.rm=T),
-     ylim = c(0.4,0.75))
-p.m <- lm(rowMeans(nvs1,na.rm=T)~d$cc.pct)
 
-plot(d$cc.pct,evs[,1],pch=16,
-     ylim=c(0.05,0.35))
-points(d$cc.pct,evs[,3],pch=16,col='gray50')
-
-plot(getValues(cc.exp),getValues(nv[[18]]))
-
-plot(d$agb,nvs[,1],pch=16)
-plot(d$agb,evs[,1],pch=16,col='gray50')
 
 
 ############# compare Landsat NDVI with Berner map ###############
 # Berner et al 2012 Larch Biomass Map
 agb <- raster("L:/data_repo/gis_data/Berner_2011_Kolyma_fire_biomass/kolyma_landsat5_larch_AGB_gm2_2007.tif")
 
-# cloud free landsat map from 28 July 2017
+# mostly cloud free landsat map from 28 July 2017
 ls <- stack(list.files("L:/data_repo/gis_data/landsat/LC081050122017072801T1-SC20180524140512/",pattern="sr_band",full.names = T))
 
 lsm <- raster("L:/data_repo/gis_data/landsat/LC081050122017072801T1-SC20180524140512/LC08_L1TP_105012_20170728_20170810_01_T1_pixel_qa.tif")
+lsm <- raster("L:/data_repo/gis_data/landsat/LC08_L1TP_105012_20170728_20170810_01_T1/LC08_L1TP_105012_20170728_20170810_01_T1_BQA.TIF")
+
+## mask using clear pixel values from landsat BQA band: https://landsat.usgs.gov/collectionqualityband
+ls <- mask(ls,lsm,inverse=T,maskvalue=2720,updatevalue=NA)
 # calculate ndvi
 ls.n <- (ls[[5]]-ls[[4]])/(ls[[5]]+ls[[4]])
+ls.e <- evi(ls[[2:5]])
+ls.e <- reclassify(ls.e,matrix(c(-Inf,0.1,NA,1,Inf,NA),nrow = 2,byrow = T),
+                   filename="L:/data_repo/gis_data/landsat/LC081050122017072801T1-SC20180524140512/LC081050122017072801T1_EVI.tif",
+                   overwrite = T)
+ls.e <- projectRaster(ls.e,agb,
+                      filename = "L:/data_repo/gis_data/landsat/LC081050122017072801T1-SC20180524140512/LC081050122017072801T1_EVI_aea.tif",
+                      overwrite = T)
 
-ls.n <- reclassify(ls.n,matrix(c(-Inf,0.4,NA,1,Inf,NA),nrow = 2,byrow = T),
+ls.w <- ndwi(ls[[2:5]])
+ls.n <- reclassify(ls.n,matrix(c(-Inf,0.5,NA,1,Inf,NA),nrow = 2,byrow = T),
                    filename="L:/data_repo/gis_data/landsat/LC081050122017072801T1-SC20180524140512/LC081050122017072801T1_NDVI.tif",
                    overwrite = T)
 
@@ -790,18 +854,70 @@ ls.n <- projectRaster(ls.n,agb,
                       filename = "L:/data_repo/gis_data/landsat/LC081050122017072801T1-SC20180524140512/LC081050122017072801T1_NDVI_aea.tif",
                       overwrite = T)
 
+## load processed landsat files ##
 ls.n <- raster("L:/data_repo/gis_data/landsat/LC081050122017072801T1-SC20180524140512/LC081050122017072801T1_NDVI_aea.tif")
-r30 <- lm(getValues(ls.n)~getValues(agb))
+ls.e <- raster("L:/data_repo/gis_data/landsat/LC081050122017072801T1-SC20180524140512/LC081050122017072801T1_EVI_aea.tif")
 
-ls.f <- extract(ls.n,d)
+#r30 <- lm(getValues(ls.n)~getValues(agb))
 
-plot(d$cc.pct,nvs1[,6],pch=16,
-     ylim=c(0.55,0.85))
-points(d$cc.pct,ls.f,pch=16,col='red')
+pl.ls.n <- projectRaster(nf1[[3]],ls.n,filename = "planet_07262018_ndvi_30m.tif",overwrite=T)
+pl.ls.e <- projectRaster(ef1[[3]],ls.n,filename = "planet_07262018_evi_30m.tif",overwrite=T)
+
+
+## extract landsat data for study sites ##
+ls.f <- extract(ls.n,d,buffer=15,na.rm=T,small=T)
+ls.fe <- extract(ls.e,d,buffer=15,na.rm=T,small=T)
+###########################################################################
+###########################################################################
+######## Figure 9 - Landsat VI vs Canopy Cover                        #####
+###########################################################################
+### plot Landsat VI vs planet VA
+
+pdf(file='L:/projects/ness_phenology/figures/fig9_landsat_vs_planet_VI.pdf',5,5)
+par(cex=1,cex.axis=1.25,cex.lab=1.25
+    #mfrow=c(2,1),mar=c(0,0,0,0),oma=c(5,5,5,2)
+    )
+plot(getValues(ls.n),getValues(pl.ls),,pch=16,
+     xlim=c(0.4,0.9),
+     ylim=c(0.4,0.9),
+     xlab="Landsat NDVI",
+     yaxt="n",ylab="Planet NDVI")
+axis(2,labels=T,tick=T,las=2)	
+#axis(1,labels=F,tick=T)
+abline(0,1,lty="dashed")
+
+dev.off()
+### plot Landsat VI vs canopy cover
+pdf(file="L:/projects/ness_phenology/figures/figure9.pdf",6,6)
+plot(d$cc.pct,ls.f,pch=16,
+     ylim=c(0,0.9),xlim=c(0,100),
+     xlab='Observed Canopy Cover (%)',
+     yaxt="n",
+     ylab='Landsat VI')
+points(d$cc.pct,ls.fe,pch=17)
+segments(d$cc.pct-d$SE,unlist(ls.f),d$cc.pct+d$SE,unlist(ls.f))
+segments(d$cc.pct-d$SE,unlist(ls.fe),d$cc.pct+d$SE,unlist(ls.fe))
+axis(2,labels=T,tick=T,las=2)	
+
+abline(summary(lm(unlist(ls.fe)~d$cc.pct)),lty="dashed",lwd=2)
+summary(lm(unlist(ls.f)~d$cc.pct))
+
+legend("bottomleft",bty="n",
+       c("NDVI","EVI"),
+       pch=c(16,17),inset=inst,cex=1.25)
+
+dev.off()
+
+###########################################################################
+
+plot(ls.f,nvs1[,3])
+
+
 
 plot(d$agb,nvs1[,6],pch=16,
      ylim=c(0.55,0.85))
-points(d$agb,ls.f,pch=16,col='red')
+points(d$agb,ls.f,pch=16,col='red',
+       xlim=c(0.5,0.8))
 
 l.r <- lm(ls.f~d$cc.pct)
 p.r <- lm(nvs1[,6]~d$cc.pct)
@@ -811,7 +927,7 @@ p.a <- lm(nvs1[,6]~d$agb)
 pdf(file='L:/projects/ness_phenology/figures/landsat_vs_planet.pdf',5,5)
 
 par(cex=1,cex.axis=1.25,cex.lab=1.25,mar=c(5,5,4,2))
-plot(ls.f,nvs1[,6],pch=16,
+plot(ls.f,nvs1[,3],pch=16,
      xlim=c(0.6,0.85),
      ylim=c(0.6,0.85),
      xlab = "Landsat8 NDVI",
