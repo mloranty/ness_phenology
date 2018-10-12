@@ -221,13 +221,13 @@ xl <- c(130,265)
 yl <- c(0,0.8)
 pw <- 0.75
 lw <- 3
-cl <- 1.5
+cl <- 1.75
 #############
 # make a four panel plot
 # tiff(file='C:/Users/mloranty/Documents/GitHub/ness_phenology/field_ndvi.tiff',
 #      width=10,height=10,units="in",res=300,compression="lzw",bg="white")
 pdf(file="L:/projects/ness_phenology/figures/field_ndvi.pdf",10,10)
-par(cex=1,cex.axis=cl,cex.lab=cl,mar=c(0,0,0,0),mfrow=c(2,2),oma=c(5,5,5,2))
+par(cex=1.5,cex.axis=cl,cex.lab=cl,mar=c(0,0,0,0),mfrow=c(2,2),oma=c(5,5,5,2))
 #plot  2016 overstory data
 plot(ndvi$doy[oh1.16],ndvi$ndvi[oh1.16],
      pch=1,main='',
@@ -240,6 +240,7 @@ plot(ndvi$doy[oh1.16],ndvi$ndvi[oh1.16],
 axis(2,labels=T,tick=T,las=2)	
 axis(1,labels=F,tick=T)
 mtext("NDVI",side=2,line=3,cex=cl)
+mtext("Overstory",side=3,line=1,cex=cl)
 
 lines(ndvi$doy[oh1.16],filter(ndvi$ndvi[oh1.16],rep(1,5),method="convolution",sides=2)/5,
       lwd=lw,
@@ -273,7 +274,7 @@ lines(ndvi$doy[ol2.16],filter(ndvi$ndvi[ol2.16],rep(1,5),method="convolution",si
       lty='dotted')
 legend('bottomleft',c('High Density','Low Density'),fill=c('black','blue'),bty='n',inset=0.05,cex=cl)
 legend('topright','A',bty='n',inset=0.05,cex=cl)
-legend('top','Overstory 2016',bty='n',cex=cl)
+legend('topleft','2016',bty='n',cex=cl)
 ###########################################################################
 #par(mfcol=c(2,2))
 plot(ndvi$doy[uh1.16],ndvi$ndvi[uh1.16],
@@ -286,6 +287,7 @@ plot(ndvi$doy[uh1.16],ndvi$ndvi[uh1.16],
      ylab='',yaxt='n')
 axis(2,labels=F,tick=T)	
 axis(1,labels=F,tick=T)
+mtext("Understory",side=3,line=1,cex=cl)
 
 lines(ndvi$doy[uh1.16],filter(ndvi$ndvi[uh1.16],rep(1,5),method="convolution",sides=2)/5,
       lwd=lw,
@@ -317,7 +319,7 @@ lines(ndvi$doy[ul2.16],filter(ndvi$ndvi[ul2.16],rep(1,5),method="convolution",si
       lwd=lw,
       lty='dotted')
 legend('topright','B',bty='n',inset=0.05,cex=cl)
-legend('top','Understory 2016',bty='n',cex=cl)
+legend('topleft','2016',bty='n',cex=cl)
 ##################### 2017 ##############################
 ##################### 2017 ##############################
 #plot  2017 overstory data
@@ -333,6 +335,7 @@ plot(ndvi$doy[oh1.17],ndvi$ndvi[oh1.17],
 axis(1,labels=F,tick=T)
 axis(2,labels=T,tick=T,las=2)	
 mtext("NDVI",side=2,line=3,cex=cl)
+mtext("Day of Year",side=1,line=3,cex=cl)
 
 lines(ndvi$doy[oh1.17],filter(ndvi$ndvi[oh1.17],rep(1,5),method="convolution",sides=2)/5,
       lwd=lw,
@@ -366,7 +369,7 @@ lines(ndvi$doy[ol2.17],filter(ndvi$ndvi[ol2.17],rep(1,5),method="convolution",si
       lty='dotted')
 
 legend('topright','C',bty='n',inset=0.05,cex=cl)
-legend('top','Overstory 2017',bty='n',cex=cl)
+legend('topleft','2017',bty='n',cex=cl)
 #########################
 ## plot understory 2017##
 plot(ndvi$doy[uh1.17],ndvi$ndvi[uh1.17],
@@ -379,7 +382,7 @@ plot(ndvi$doy[uh1.17],ndvi$ndvi[uh1.17],
      ylab='',yaxt='n')
 axis(2,labels=F,tick=T)	
 axis(1,labels=F,tick=T)
-
+mtext("Day of Year",side=1,line=3,cex=cl)
 
 lines(ndvi$doy[uh1.17],filter(ndvi$ndvi[uh1.17],rep(1,5),method="convolution",sides=2)/5,
       lwd=lw,
@@ -411,7 +414,7 @@ lines(ndvi$doy[ul2.17],filter(ndvi$ndvi[ul2.17],rep(1,5),method="convolution",si
       lwd=lw,
       lty='dotted')
 legend('topright','D',bty='n',inset=0.05,cex=cl)
-legend('top','Understory 2017',bty='n',cex=cl)
+legend('topleft','2017',bty='n',cex=cl)
 dev.off()
 
 #############################################################################################

@@ -365,6 +365,7 @@ dev.off()
 ################ canopy cover model fit figure #################
 po <- lm(predict(m1)~cc)
 cr <- lm(predict(m1)-cc~cc)
+inst <- 0.05
 pdf(file='L:/projects/ness_phenology/figures/fig6_canopy_cover_model_fit.pdf',5,8)
 par(cex=1,cex.axis=1.25,cex.lab=1.25,mfrow=c(2,1),mar=c(0,0,0,0),oma=c(5,5,5,2))
 plot(cc,predict(m1),pch=16,
@@ -376,7 +377,7 @@ axis(2,labels=T,tick=T,las=2)
 axis(1,labels=F,tick=T)
 mtext("Predicted Canopy Cover (%)",side=2,line=3,cex=1.25)
 abline(lm(predict(m1)~cc),lwd=2,lty='dashed')
-
+abline(0,1,lwd=0.5)
 text(20,70,paste("r2 =",round(summary(po)$adj.r.squared,2)))
 legend("bottomright","A",bg="white",box.col="white",cex=1.25,inset=inst)
 
@@ -525,7 +526,7 @@ plot(d$cc.pct,d$agb,pch=16,
 
 axis(2,labels=T,tick=T,las=2)	
 
-mtext(expression(paste("Larch Biomass (g ",C^-1," ",m^-2,")", sep="")),side=2,line=3.5,cex=1.25)
+mtext(expression(paste("Larch Biomass C (g C"," ",m^-2,")", sep="")),side=2,line=3.5,cex=1.25)
 
 segments(d$cc.pct,d$agb-d$agb.se,d$cc.pct,d$agb+d$agb.se,lwd=0.5)
 segments(d$cc.pct-d$SE,d$agb,d$cc.pct+d$SE,d$agb,lwd=0.5)
