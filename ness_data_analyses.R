@@ -935,56 +935,5 @@ plot(ls.f,nvs1[,3],pch=16,
      ylab = "PlanetScope NDVI")
 	 abline(0,1,lwd=2,lty='dashed')
 	 dev.off()
-############# create data frame for full phenology model ###############
-
-
-
-
-
-# strip timestamp from filenames
-ts <- strsplit(n,"/")
-ts <- sapply(ts,'[[',4)
-ts <- substr(ts,1,15)
-ts <- strptime(ts,"%Y%m%d_%H%M%S",tz="GMT")
-
-# now correct for local time
-ts <- with_tz(ts,tzone="Asia/Magadan")
-
-# calculate fractional julian day
-fjday <- julian(ts,origin = as.POSIXct('2017-01-01', tz = "Asia/Magadan"))
-
-# read in sample points for preliminary analyses
-s <- readOGR('L:/projects/ness_phenology/gis',
-             layer='cherskiy_veg_pheno_sample')
-
-# something wonky with original layer - but OK for now
-# looks like there was a columns for elevation that we don't want/need
-r <- s@coords[,1:2]
-v <- SpatialPoints(r,proj4string = CRS('+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'))
-
-
-# extract the ndvi and combine date/site info
-nv <- extract(nf,v)
-ev <- extract(ef,v)
-
-colnames(nv) <- fjday
-
-# vector of vegetation types for preliminary analyses
-veg <- c(rep('fs',2),rep('s',14),rep('f',15),rep('fp',10))
-
-# create data frame for modeling
-# as vector extracts by column, and here each column is an image (jday), and each row is a site
-mod.dat <- as.data.frame(as.vector(nv))
-mod.dat$evi <- as.vector(ev)
-mod.dat$doy <- rep(fjday,each=nrow(nv))
-mod.dat$site <-  rep(s@data$Name,41)
-mod.dat$veg <- rep(veg,41)
-names(mod.dat) <- c("ndvi","evi","doy","site","veg")
-
-mod.dat <- na.omit(mod.dat)
-# write to file
-write.csv(mod.dat,file="C:/Users/mloranty/Documents/GitHub/ness_phenology/planet_veg_class_sample.csv",row.names = F)
-
-write.csv(mod.dat,file="L:/projects/ness_phenology/planet_veg_class_sample.csv",row.names = F)
-
-
+	 
+########################################################################
