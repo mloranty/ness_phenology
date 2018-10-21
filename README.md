@@ -1,2 +1,2 @@
 # ness_phenology
-analyses of phenology data for Northeast Science Station
+analyses of NDVI and phenology data for Northeast Science Station
