@@ -715,12 +715,12 @@ legend("bottomright","B",bg="white",box.col="white",cex=1.25,inset=inst)
 grid()
 
 # panel C obs canopy vs mean growing season NDVI and EVI
-plot(d$cc.pct,rowMeans(nvs1[,1:4]),pch=16,
+plot(d$cc.pct,rowMeans(nvs1),pch=16,
      ylim=c(0,0.8),xlim=c(0,100),
      xlab='Canopy Cover (%)',
      yaxt="n",
      ylab='Mean Seasonal VI')
-points(d$cc.pct,rowMeans(evs1[,1:4]),pch=17)
+points(d$cc.pct,rowMeans(evs1),pch=17)
 axis(2,labels=T,tick=T,las=2)	
 mtext("Season Mean VI",side=2,line=3)
 mtext("Observed Canopy Cover (%)",side=1,line=3)
@@ -801,12 +801,12 @@ legend("bottomright","E",bg="white",box.col="white",cex=1.25,inset=inst)
 grid()
 
 # panel F model mean season VI
-plot(ws[,1],rowMeans(ws[,2:5]),pch=16,type="b",
+plot(ws[,1],rowMeans(ws[,2:6]),pch=16,type="b",
      ylim=c(0,0.8),xlim=c(0,100),
      xlab='Canopy Cover (%)',
      yaxt="n",
      ylab='Mean Seasonal VI')
-lines(wse[,1],rowMeans(wse[,2:5]),type="b",pch=17)
+lines(wse[,1],rowMeans(wse[,2:6]),type="b",pch=17)
 axis(2,labels=F,tick=T,las=2)	
 mtext("Modeled Canopy Cover (%)",side=1,line=3)
 # not sure if these are necessary - sd for VI is conveyed in panels above
